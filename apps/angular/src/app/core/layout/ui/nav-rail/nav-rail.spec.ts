@@ -12,6 +12,8 @@ interface SetupOptions {
   branches?: string[];
   currentBranch?: string;
   currentBranchBehind?: number;
+  lensRef?: string;
+  lensKind?: '' | 'local' | 'remote';
   remoteBranches?: string[];
   tags?: string[];
   remotes?: string[];
@@ -44,6 +46,8 @@ async function setup(opts: SetupOptions = {}): Promise<ComponentFixture<NavRail>
   ref.setInput('branches', opts.branches ?? []);
   ref.setInput('currentBranch', opts.currentBranch ?? '');
   ref.setInput('currentBranchBehind', opts.currentBranchBehind ?? 0);
+  ref.setInput('lensRef', opts.lensRef ?? '');
+  ref.setInput('lensKind', opts.lensKind ?? '');
   ref.setInput('remoteBranches', opts.remoteBranches ?? []);
   ref.setInput('tags', opts.tags ?? []);
   ref.setInput('remotes', opts.remotes ?? []);
@@ -339,10 +343,12 @@ describe('NavRail', () => {
     expect(emitted).toEqual(['feature/x']);
   });
 
-  it('activates a local branch row with Enter and Space', async () => {
+  it('toggles the lens, not checkout, with Enter and Space on a local branch row', async () => {
     const fixture = await setup({ branches: ['main'] });
-    const emitted: string[] = [];
-    fixture.componentInstance.branchSelected.subscribe((name) => emitted.push(name));
+    const lensed: { ref: string; kind: string }[] = [];
+    const checkedOut: string[] = [];
+    fixture.componentInstance.lensToggled.subscribe((value) => lensed.push(value));
+    fixture.componentInstance.branchSelected.subscribe((name) => checkedOut.push(name));
 
     const row = all(fixture, 'st-sidebar-branch')[0] as HTMLElement;
     expect(row.getAttribute('role')).toBe('button');
@@ -350,7 +356,78 @@ describe('NavRail', () => {
     row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     row.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
 
-    expect(emitted).toEqual(['main', 'main']);
+    // ADR-0042: keyboard activation toggles the view-only lens; checkout stays
+    // on double-click (and the row menu).
+    expect(lensed).toEqual([
+      { ref: 'main', kind: 'local' },
+      { ref: 'main', kind: 'local' },
+    ]);
+    expect(checkedOut).toEqual([]);
+  });
+
+  it('emits lensToggled on a single click on a local branch row', async () => {
+    const fixture = await setup({ branches: ['main', 'feature/x'] });
+    const emitted: { ref: string; kind: string }[] = [];
+    fixture.componentInstance.lensToggled.subscribe((value) => emitted.push(value));
+
+    (all(fixture, 'st-sidebar-branch')[1] as HTMLElement).click();
+
+    expect(emitted).toEqual([{ ref: 'feature/x', kind: 'local' }]);
+  });
+
+  it('reflects the controlled lens with aria-pressed and the lens row class', async () => {
+    const fixture = await setup({
+      branches: ['main', 'feature/x'],
+      currentBranch: 'main',
+      lensRef: 'feature/x',
+      lensKind: 'local',
+    });
+    const rows = all(fixture, 'st-sidebar-branch') as HTMLElement[];
+
+    expect(rows[1].getAttribute('aria-pressed')).toBe('true');
+    expect(rows[1].classList.contains('st-rail__row--lens')).toBe(true);
+    expect(rows[0].getAttribute('aria-pressed')).toBe('false');
+    expect(rows[0].classList.contains('st-rail__row--lens')).toBe(false);
+  });
+
+  it('keeps the current-branch selection bar exclusive and never lends it the lens class', async () => {
+    const fixture = await setup({
+      branches: ['main', 'feature/x'],
+      currentBranch: 'main',
+      lensRef: 'feature/x',
+      lensKind: 'local',
+    });
+    const rows = all(fixture, 'st-sidebar-branch') as HTMLElement[];
+
+    expect(rows[0].classList.contains('st-selection-bar')).toBe(true);
+    expect(rows[0].classList.contains('st-rail__row--lens')).toBe(false);
+    expect(rows[0].getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('toggles the lens from a remote row on single click and keyboard', async () => {
+    const fixture = await setup({
+      remotes: ['origin'],
+      remoteBranches: ['origin/main'],
+      lensKind: 'remote',
+      lensRef: 'origin/main',
+    });
+    const emitted: { ref: string; kind: string }[] = [];
+    const checkedOut: string[] = [];
+    fixture.componentInstance.lensToggled.subscribe((value) => emitted.push(value));
+    fixture.componentInstance.remoteBranchSelected.subscribe((name) => checkedOut.push(name));
+
+    const row = all(fixture, 'st-sidebar-remote-branches')[0] as HTMLElement;
+    expect(row.getAttribute('aria-pressed')).toBe('true');
+    expect(row.classList.contains('st-rail__row--lens')).toBe(true);
+
+    row.click();
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    expect(emitted).toEqual([
+      { ref: 'origin/main', kind: 'remote' },
+      { ref: 'origin/main', kind: 'remote' },
+    ]);
+    expect(checkedOut).toEqual([]);
   });
 
   it('renders remote branches under their remote, stripping the prefix', async () => {

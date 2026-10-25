@@ -30,9 +30,17 @@ interface RowMenu {
  * stashes, git-flow and the collapse control.
  *
  * The ref lists are supplied by the parent (root `RepoState`); the component
- * renders explicit loading/offline/empty states instead of inventing data. Every
- * behavior of the retired `sidebar-left` is preserved (`dblclick`/Enter/Space
- * checkout, row context menus, the current-branch delete guard, "+" intents).
+ * renders explicit loading/offline/empty states instead of inventing data. Row
+ * context menus, the current-branch delete guard and the "+" intents are
+ * unchanged from the retired `sidebar-left`.
+ *
+ * Branch-lens semantics (ADR-0042): a SINGLE click (and Enter/Space) on a local
+ * or remote branch row toggles the view-only lens instead of checking the ref
+ * out — the intentional change from the old "Enter/Space activates checkout".
+ * Checkout stays available as a double-click (the pre-checkout confirmation
+ * still owns that path) and through the branch row menu. The parent decides
+ * what a click on the CURRENT branch means; this component only emits
+ * `lensToggled` and renders the controlled `lensRef`/`lensKind` inputs.
  *
  * Ref colour roles (Dark Neon, styles only): local branches read violet
  * (`--st-color-ref-branch`), with the current branch's label lifted to
@@ -151,9 +159,12 @@ interface RowMenu {
                   <li
                     class="st-rail__row st-selectable-row st-focus-ring--inset"
                     [class.st-selection-bar]="branch === currentBranch()"
+                    [class.st-rail__row--lens]="isLensActive(branch, 'local')"
+                    [attr.aria-pressed]="isLensActive(branch, 'local')"
                     data-testid="st-sidebar-branch"
                     role="button"
                     tabindex="0"
+                    (click)="toggleLens(branch, 'local')"
                     (dblclick)="selectBranch(branch)"
                     (keydown)="onBranchKeydown($event, branch)"
                     (contextmenu)="onBranchContextMenu($event, branch)"
@@ -207,9 +218,16 @@ interface RowMenu {
                   @for (branch of group.branches; track branch) {
                     <li
                       class="st-rail__row st-rail__row--sub st-rail__row--mono st-rail__row--remote st-selectable-row st-focus-ring--inset"
+                      [class.st-rail__row--lens]="
+                        isLensActive(remoteName(group.remote, branch), 'remote')
+                      "
+                      [attr.aria-pressed]="
+                        isLensActive(remoteName(group.remote, branch), 'remote')
+                      "
                       data-testid="st-sidebar-remote-branches"
                       role="button"
                       tabindex="0"
+                      (click)="toggleLens(remoteName(group.remote, branch), 'remote')"
                       (dblclick)="selectRemoteBranch(group.remote, branch)"
                       (keydown)="onRemoteBranchKeydown($event, group.remote, branch)"
                     >
@@ -596,6 +614,23 @@ interface RowMenu {
       color: var(--st-color-ref-tag);
     }
 
+    /*
+     * Branch lens marker (ADR-0042): a wash plus a 1px ref-coloured inset edge.
+     * Deliberately lighter than the exclusive .st-selection-bar (3px teal +
+     * selected fill) so the current branch keeps its unique "you are here"
+     * treatment; the marker, the graph lens bar and the aria-pressed state
+     * carry the lens state without relying on colour alone.
+     */
+    .st-rail__row--lens {
+      background: color-mix(in srgb, var(--st-color-ref-branch) 12%, transparent);
+      box-shadow: inset 1px 0 0 var(--st-color-ref-branch);
+    }
+
+    .st-rail__row--remote.st-rail__row--lens {
+      background: color-mix(in srgb, var(--st-color-ref-remote) 12%, transparent);
+      box-shadow: inset 1px 0 0 var(--st-color-ref-remote);
+    }
+
     .st-rail__row-label {
       flex: 1 1 auto;
       min-width: 0;
@@ -806,6 +841,10 @@ export class NavRail {
   readonly branches = input<readonly string[]>([]);
   /** Name of the current local branch; only it can carry a pull-pending badge. */
   readonly currentBranch = input('');
+  /** Display name of the lensed ref, or '' when no lens is active (ADR-0042). */
+  readonly lensRef = input('');
+  /** Which rail list owns the lensed ref, or '' when no lens is active. */
+  readonly lensKind = input<'' | 'local' | 'remote'>('');
   /** Pull-pending count of the current branch; badges its row when > 0. */
   readonly currentBranchBehind = input(0);
   /** Remote-tracking branch names, e.g. `origin/david/topic`. */
@@ -838,6 +877,11 @@ export class NavRail {
   readonly branchSelected = output<string>();
   /** Remote-tracking branch short name requested for checkout (`<remote>/<branch>`). */
   readonly remoteBranchSelected = output<string>();
+  /**
+   * Single-click/keyboard lens request. The parent toggles — or clears when the
+   * target is the current branch — so this component stays controlled.
+   */
+  readonly lensToggled = output<{ ref: string; kind: 'local' | 'remote' }>();
   /** User asked to create a new branch ("+" in the BRANCHES header). */
   readonly newBranchRequested = output<void>();
   /** User asked to create a new tag ("+" in the TAGS header). */
@@ -949,23 +993,44 @@ export class NavRail {
    * prefix-stripped branch names, so the remote prefix is reconstructed here.
    */
   selectRemoteBranch(remote: string, shortName: string): void {
-    this.remoteBranchSelected.emit(`${remote}/${shortName}`);
+    this.remoteBranchSelected.emit(this.remoteName(remote, shortName));
   }
 
-  /** Enter/Space activation for local branch rows (role="button"). */
+  /** Display name of a remote-tracking branch, as `RepoState.remoteBranches` uses. */
+  remoteName(remote: string, shortName: string): string {
+    return `${remote}/${shortName}`;
+  }
+
+  /**
+   * Enter/Space on a local branch row toggles the lens (ADR-0042) — an
+   * intentional change from activating checkout; checkout remains on
+   * double-click and in the row menu.
+   */
   onBranchKeydown(event: KeyboardEvent, name: string): void {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      this.selectBranch(name);
+      this.toggleLens(name, 'local');
     }
   }
 
-  /** Enter/Space activation for remote branch rows (role="button"). */
+  /** Enter/Space on a remote branch row toggles the lens, mirroring locals. */
   onRemoteBranchKeydown(event: KeyboardEvent, remote: string, shortName: string): void {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      this.selectRemoteBranch(remote, shortName);
+      this.toggleLens(this.remoteName(remote, shortName), 'remote');
     }
+  }
+
+  // -- branch lens (ADR-0042) ----------------------------------------------
+
+  /** Emit a lens toggle; the parent owns the on/off decision and the state. */
+  toggleLens(ref: string, kind: 'local' | 'remote'): void {
+    this.lensToggled.emit({ ref, kind });
+  }
+
+  /** True when `name` is the currently lensed ref of that kind. */
+  isLensActive(name: string, kind: 'local' | 'remote'): boolean {
+    return this.lensRef() === name && this.lensKind() === kind;
   }
 
   // -- per-row context menu ------------------------------------------------

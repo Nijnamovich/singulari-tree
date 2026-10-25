@@ -41,7 +41,7 @@ function makeCommit(index: number): Commit {
 function makePage(count: number, total = count): GetCommitsResponse {
   const commits = Array.from({ length: count }, (_, i) => makeCommit(i));
   const lanes: Lane[] = commits.map((_, i) => ({ index: i % 2, color: i % 8, continues: i % 2 === 0 }));
-  return { commits, total, lanes };
+  return { commits, total, lanes, inRefs: [] };
 }
 
 function makeBridge(opts: { recent?: Repository[]; offline?: boolean } = {}): IpcBridge & { invoke: Mock } {

@@ -35,6 +35,10 @@ export const LANE_COLUMN_WIDTH = 14;
     '[style.height.px]': 'rowHeight',
     '[class.st-graph-row--selected]': 'selected()',
     '[class.st-selection-bar]': 'selected()',
+    '[class.st-graph-row--lens-active]': 'lensActive()',
+    '[class.st-graph-row--lens-outside]': 'lensState() === "out"',
+    '[class.st-graph-row--lens-inside]': 'lensState() === "in"',
+    '[attr.data-lens]': 'lensState()',
     '(click)': 'picked.emit()',
     '(keydown.enter)': 'picked.emit()',
   },
@@ -117,6 +121,20 @@ export const LANE_COLUMN_WIDTH = 14;
     :host:focus-visible {
       outline: 1px solid var(--st-color-focus);
       outline-offset: -1px;
+    }
+
+    /*
+     * Branch lens (ADR-0042): rows outside the lensed ref are dimmed; rows
+     * inside get a ref-coloured wash + a 1px inset marker. Both are gated on
+     * :not(.st-graph-row--selected) so the selected fill/bar always wins.
+     */
+    :host(.st-graph-row--lens-outside:not(.st-graph-row--selected)) {
+      opacity: 0.55;
+    }
+
+    :host(.st-graph-row--lens-inside:not(.st-graph-row--selected)) {
+      background: color-mix(in srgb, var(--st-color-ref-branch) 10%, transparent);
+      box-shadow: inset 1px 0 0 var(--st-color-ref-branch);
     }
 
     :host(.st-graph-row--selected) {
@@ -228,6 +246,10 @@ export class GraphRow {
   readonly commit = input.required<Commit>();
   readonly lane = input.required<Lane>();
   readonly selected = input(false);
+  /** True while the graph renders a view-only branch lens (ADR-0042). */
+  readonly lensActive = input(false);
+  /** True when this commit belongs to the lensed ref (`inRefs` from the core). */
+  readonly inLens = input(false);
   /** Highest lane index currently in the viewport; keeps every row's graph column aligned. */
   readonly maxLane = input(0);
   /**
@@ -239,6 +261,16 @@ export class GraphRow {
   readonly picked = output<void>();
 
   readonly rowHeight = GRAPH_ROW_HEIGHT;
+
+  /**
+   * Lens membership exposed as `data-lens` (and used for the host classes):
+   * empty without a lens, `in` for a commit reachable from the lensed ref and
+   * `out` otherwise.
+   */
+  readonly lensState = computed<'' | 'in' | 'out'>(() => {
+    if (!this.lensActive()) return '';
+    return this.inLens() ? 'in' : 'out';
+  });
 
   readonly refs = computed(() => this.commit().refs ?? []);
   readonly statsTitle = computed(() => {

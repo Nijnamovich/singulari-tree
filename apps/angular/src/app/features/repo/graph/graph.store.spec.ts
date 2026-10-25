@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Commit, Lane, Repository } from '@contracts/domain';
 import type { GetCommitsResponse } from '@contracts/gitcore';
+import { BranchLensStore } from '@core/services/branch-lens.store';
 import { GraphSessionStore } from '@core/services/graph-session.store';
 import { IpcBridge } from '@core/services/ipc-bridge.service';
 import { LiveRegionService } from '@singularitree/ui-kit';
@@ -56,7 +57,7 @@ function makePage(count: number, startIndex = 0, total = count): GetCommitsRespo
     color: i % 8,
     continues: i % 2 === 0,
   }));
-  return { commits, total, lanes };
+  return { commits, total, lanes, inRefs: [] };
 }
 
 type Handler = (req: unknown) => unknown;
@@ -118,6 +119,7 @@ describe('GraphStore', () => {
       repoId: REPO.id,
       offset: 0,
       limit: GRAPH_WINDOW_SIZE + 100,
+      refs: [],
     });
     expect(store.commits()).toHaveLength(300);
     expect(store.lanes()).toHaveLength(300);
@@ -162,7 +164,12 @@ describe('GraphStore', () => {
     await vi.waitFor(() => expect(store.commits()).toHaveLength(600));
 
     expect(getCommits).toHaveBeenCalledTimes(2);
-    expect(getCommits).toHaveBeenLastCalledWith({ repoId: REPO.id, offset: 300, limit: 300 });
+    expect(getCommits).toHaveBeenLastCalledWith({
+      repoId: REPO.id,
+      offset: 300,
+      limit: 300,
+      refs: [],
+    });
     expect(store.lanes()).toHaveLength(600);
     expect(store.offset()).toBe(600);
   });
@@ -239,7 +246,12 @@ describe('GraphStore', () => {
 
   it('tolerates a missing lanes array by defaulting neutral lanes', async () => {
     const getCommits = vi.fn(() =>
-      Promise.resolve({ commits: [makeCommit(0), makeCommit(1)], total: 2 } as GetCommitsResponse),
+      Promise.resolve({
+        commits: [makeCommit(0), makeCommit(1)],
+        total: 2,
+        lanes: [],
+        inRefs: [],
+      } as GetCommitsResponse),
     );
     store = new GraphStore(makeBridge({ getCommits }));
     store.repoId.set(REPO.id);
@@ -539,6 +551,7 @@ describe('GraphStore', () => {
         { index: 0, color: 0, continues: false },
         { index: 1, color: 1, continues: false },
       ],
+      inRefs: [],
     };
     store = new GraphStore(makeBridge({ getCommits: () => Promise.resolve(page) }));
     store.repoId.set(REPO.id);
@@ -641,6 +654,7 @@ describe('GraphStore', () => {
         { index: 1, color: 1, continues: false },
         { index: 2, color: 2, continues: false },
       ],
+      inRefs: [],
     };
     store = new GraphStore(makeBridge({ getCommits: () => Promise.resolve(page) }));
     store.repoId.set(REPO.id);
@@ -1370,6 +1384,155 @@ describe('GraphStore', () => {
       await store.openRepository(REPO.fsPath);
       expect(store.selectedOid()).toBe(oid);
       expect(store.lockedOid()).toBe(oid);
+    });
+  });
+
+  // -- branch lens (ADR-0042) ----------------------------------------------
+
+  describe('branch lens', () => {
+    it('sends the lensed ref to getCommits and falls back to an empty scope', async () => {
+      const lens = new BranchLensStore();
+      const getCommits = vi.fn(() => Promise.resolve(makePage(2, 0, 2)));
+      store = new GraphStore(makeBridge({ getCommits }), null, lens);
+      store.repoId.set(REPO.id);
+
+      await store.loadWindow(0);
+      expect(getCommits).toHaveBeenLastCalledWith({
+        repoId: REPO.id,
+        offset: 0,
+        limit: GRAPH_WINDOW_SIZE + 100,
+        refs: [],
+      });
+
+      lens.set('feature/x', 'local');
+      await store.loadWindow(0);
+      expect(getCommits).toHaveBeenLastCalledWith({
+        repoId: REPO.id,
+        offset: 0,
+        limit: GRAPH_WINDOW_SIZE + 100,
+        refs: ['feature/x'],
+      });
+    });
+
+    it('maps inRefs onto lensOids, replacing on reload and unioning on append', async () => {
+      const getCommits = vi.fn((req: unknown) => {
+        const { offset } = req as { offset: number };
+        if (offset <= 0) {
+          return Promise.resolve<GetCommitsResponse>({
+            commits: [makeCommit(0), makeCommit(1), makeCommit(2)],
+            total: 5,
+            lanes: [],
+            inRefs: [true, false, true],
+          });
+        }
+        return Promise.resolve<GetCommitsResponse>({
+          commits: [makeCommit(3), makeCommit(4)],
+          total: 5,
+          lanes: [],
+          inRefs: [false, true],
+        });
+      });
+      store = new GraphStore(makeBridge({ getCommits }));
+      store.repoId.set(REPO.id);
+
+      await store.loadWindow(0);
+      const first = [makeCommit(0), makeCommit(2)].map((commit) => commit.oid?.hex as string);
+      expect([...store.lensOids()].sort()).toEqual([...first].sort());
+
+      // Appending a window keeps the earlier highlights...
+      await store.loadWindow(3);
+      const appended = [...first, makeCommit(4).oid?.hex as string];
+      expect([...store.lensOids()].sort()).toEqual([...appended].sort());
+
+      // ...while a replacing page rebuilds the set from that response only.
+      await store.loadWindow(0);
+      expect([...store.lensOids()].sort()).toEqual([...first].sort());
+    });
+
+    it('resets the remembered scroll and reloads offset 0 for a lens change', async () => {
+      const getCommits = vi.fn(() => Promise.resolve(makePage(2, 0, 2)));
+      store = new GraphStore(makeBridge({ getCommits }));
+      store.repoId.set(REPO.id);
+      await store.loadWindow(0);
+      store.rememberScrollOffset(420);
+      store.requestScrollRestore();
+      const loadWindow = vi.spyOn(store, 'loadWindow');
+
+      store.reloadForLens();
+
+      expect(store.scrollOffset()).toBe(0);
+      expect(store.pendingScrollOffset()).toBeNull();
+      expect(loadWindow).toHaveBeenCalledWith(0);
+      await vi.waitFor(() => expect(getCommits).toHaveBeenCalledTimes(2));
+    });
+
+    it('does not carry the lens across a repository open', async () => {
+      const lens = new BranchLensStore();
+      const getCommits = vi.fn(() => Promise.resolve(makePage(2, 0, 2)));
+      store = new GraphStore(makeTwoRepoBridge(getCommits), null, lens);
+      lens.set('feature/x', 'local');
+
+      await store.openRepository(REPO.fsPath);
+      // Repo A's window was walked with the active lens scope...
+      expect(getCommits).toHaveBeenLastCalledWith({
+        repoId: REPO.id,
+        offset: 0,
+        limit: GRAPH_WINDOW_SIZE + 100,
+        refs: ['feature/x'],
+      });
+
+      // ...and opening another repository drops the view-only scope (the root
+      // `RepoState` clears it on activation), so repo B's walk is a plain HEAD
+      // walk: no stale ref survives the switch.
+      lens.clear();
+      await store.openRepository(REPO_TWO.fsPath);
+
+      expect(getCommits).toHaveBeenLastCalledWith({
+        repoId: REPO_TWO.id,
+        offset: 0,
+        limit: GRAPH_WINDOW_SIZE + 100,
+        refs: [],
+      });
+      expect(store.lensOids().size).toBe(0);
+    });
+
+    it('resets lensOids when another repository opens (success and failure)', async () => {
+      const getCommits = vi.fn((req: unknown) => {
+        const { repoId } = req as { repoId: string };
+        const commits = [makeCommit(0), makeCommit(1)];
+        return Promise.resolve<GetCommitsResponse>({
+          commits,
+          total: commits.length,
+          lanes: [],
+          inRefs: commits.map(() => repoId === REPO.id),
+        });
+      });
+      const openRepository = vi.fn((req: unknown) => {
+        const { fsPath } = req as { fsPath: string };
+        if (fsPath === REPO.fsPath) return Promise.resolve(REPO);
+        if (fsPath === REPO_TWO.fsPath) return Promise.resolve(REPO_TWO);
+        return Promise.reject({ code: 'GIT_FAILED', message: 'boom' });
+      });
+      store = new GraphStore(
+        makeBridge({
+          getCommits,
+          openRepository,
+          listRepositories: () => Promise.resolve({ repositories: [REPO, REPO_TWO] }),
+          watch: () => Promise.resolve({}),
+        }),
+      );
+
+      await store.openRepository(REPO.fsPath);
+      expect(store.lensOids().size).toBe(2);
+
+      await store.openRepository(REPO_TWO.fsPath);
+      expect(store.lensOids().size).toBe(0);
+
+      // A failed open leaves no repository, so no lens highlights either.
+      await store.openRepository(REPO.fsPath);
+      expect(store.lensOids().size).toBe(2);
+      await expect(store.openRepository('/tmp/missing')).resolves.toBeNull();
+      expect(store.lensOids().size).toBe(0);
     });
   });
 });

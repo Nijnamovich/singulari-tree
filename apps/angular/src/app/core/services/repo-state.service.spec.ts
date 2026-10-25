@@ -1,9 +1,27 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import type { Branch, Remote, Repository, Stash, Tag } from '@contracts/domain';
+import type { Branch, Commit, Remote, Repository, Stash, Tag } from '@contracts/domain';
 import type { GitFlowConfig } from '@contracts/gitcore';
+import { BranchLensStore } from './branch-lens.store';
 import type { AppError } from './ipc-bridge.service';
 import { IpcBridge } from './ipc-bridge.service';
 import { RepoState } from './repo-state.service';
+
+const COMMIT_A: Commit = {
+  oid: { hex: 'a'.repeat(40), kind: 'SHA1' },
+  parents: [],
+  author: { name: 'Ada', email: 'ada@example.com', when: '2026-01-02T10:00:00Z' },
+  committer: undefined,
+  message: 'fix: the old thing',
+  treeOid: undefined,
+  committedAt: '2026-01-02T10:05:00Z',
+  refs: [],
+};
+
+const COMMIT_B: Commit = {
+  ...COMMIT_A,
+  oid: { hex: 'b'.repeat(40), kind: 'SHA1' },
+  message: 'fix: the new thing',
+};
 
 const REPO_A: Repository = {
   id: 'repo-a',
@@ -122,14 +140,26 @@ function refsImpl(extra: Record<string, () => unknown>) {
   };
 }
 
+/**
+ * Assert the post-mutation ref refresh really happened: every ref read was
+ * issued to the `getBranches`/`getRemotes`/`getTags` trio for `repoId`.
+ */
+function expectRefsReloaded(bridge: { invoke: Mock }, repoId: string): void {
+  for (const method of ['getBranches', 'getRemotes', 'getTags']) {
+    expect(bridge.invoke).toHaveBeenCalledWith(method, { repoId });
+  }
+}
+
 describe('RepoState', () => {
   let bridge: IpcBridge & { invoke: Mock };
   let store: RepoState;
+  let lens: BranchLensStore;
 
   beforeEach(() => {
     vi.restoreAllMocks();
     bridge = makeBridge();
-    store = new RepoState(bridge);
+    lens = new BranchLensStore();
+    store = new RepoState(bridge, lens);
   });
 
   it('loads and maps refs for the active repository', async () => {
@@ -884,6 +914,29 @@ describe('RepoState', () => {
     expect(store.refOpRunning()).toBe(false);
   });
 
+  it('createBranch clears the lens when it checks the new branch out', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    lens.set('feature-a', 'local');
+    bridge.invoke.mockImplementation(refsImpl({ createBranch: () => ({ name: 'topic' }) }));
+
+    expect(await store.createBranch('topic', 'main-a', true)).toBe(true);
+
+    expect(lens.active()).toBe(false);
+  });
+
+  it('createBranch without checkout keeps the lens', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    lens.set('feature-a', 'local');
+    bridge.invoke.mockImplementation(refsImpl({ createBranch: () => ({ name: 'topic' }) }));
+
+    expect(await store.createBranch('topic', 'main-a', false)).toBe(true);
+
+    expect(lens.ref()).toBe('feature-a');
+    expect(lens.kind()).toBe('local');
+  });
+
   it('renameBranch sends the request and reloads the refs', async () => {
     store.setActive(REPO_A);
     await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
@@ -1383,7 +1436,7 @@ describe('RepoState', () => {
   it('finishGitFlow publishes the steps and clears a previous conflict on success', async () => {
     store.setActive(REPO_A);
     await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
-    store.mergeConflict.set({ hasConflict: true, oid: 'old' });
+    store.conflict.set({ operation: 'merge', hasConflict: true, oid: 'old' });
     bridge.invoke.mockImplementation(
       refsImpl({ finishGitFlow: () => ({ branch: 'feature/login', steps: ['merge feature/login'], hasConflict: false }) }),
     );
@@ -1624,5 +1677,392 @@ describe('RepoState', () => {
 
     expect(result).toBeNull();
     expect(bridge.invoke).not.toHaveBeenCalled();
+  });
+
+  // -- branch lens (ADR-0042) ----------------------------------------------
+
+  it('drops the lens when a repository becomes active', async () => {
+    lens.set('feature/x', 'local');
+
+    store.setActive(REPO_A);
+
+    expect(lens.active()).toBe(false);
+  });
+
+  it('drops the lens when the active repository is cleared or removed', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toHaveLength(2));
+    lens.set('feature/x', 'local');
+
+    store.clearActive();
+    expect(lens.active()).toBe(false);
+
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toHaveLength(2));
+    lens.set('feature/x', 'local');
+    bridge.invoke.mockResolvedValueOnce({});
+
+    await expect(store.removeRepository(REPO_A.id)).resolves.toBe(true);
+    expect(lens.active()).toBe(false);
+  });
+
+  it('drops a lens whose ref disappeared from the fresh lists', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    lens.set('feature/x', 'local');
+
+    await store.loadRefs();
+
+    expect(lens.active()).toBe(false);
+  });
+
+  it('keeps a lens while its local or remote ref is still listed', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+
+    lens.set('feature-a', 'local');
+    await store.loadRefs();
+    expect(lens.ref()).toBe('feature-a');
+
+    lens.set('origin/base-a', 'remote');
+    await store.loadRefs();
+    expect(lens.ref()).toBe('origin/base-a');
+    expect(lens.kind()).toBe('remote');
+  });
+
+  // -- cherry-pick dialog state (R1 plumbing; R2 mounts the dialog) ---------
+
+  it('opens the cherry-pick dialog with the source commit and clears a stale ref error', () => {
+    store.refOpError.set({ code: 'GIT_FAILED', message: 'boom' });
+
+    store.openCherryPick('a'.repeat(40));
+
+    expect(store.cherryPickDialog()).toEqual({ source: 'a'.repeat(40) });
+    expect(store.refOpError()).toBeNull();
+  });
+
+  it('closes the cherry-pick dialog without touching anything else', () => {
+    store.openCherryPick('a'.repeat(40));
+
+    store.closeCherryPick();
+
+    expect(store.cherryPickDialog()).toBeNull();
+    expect(store.refOpError()).toBeNull();
+  });
+
+  // -- conflict state (merge / cherry-pick / revert, ADR-0042) --------------
+
+  it('mergeConflict is a merge-only view of the general conflict state', () => {
+    store.conflict.set({ operation: 'merge', hasConflict: true, oid: 'abc' });
+    expect(store.mergeConflict()).toEqual({ hasConflict: true, oid: 'abc' });
+
+    store.conflict.set({ operation: 'cherry-pick', hasConflict: true, oid: 'def' });
+    expect(store.mergeConflict()).toBeNull();
+  });
+
+  it('dismissConflict clears any kind and dismissMergeConflict only merge', () => {
+    store.conflict.set({ operation: 'cherry-pick', hasConflict: true, oid: 'abc' });
+
+    store.dismissMergeConflict();
+    expect(store.conflict()).not.toBeNull();
+
+    store.dismissConflict();
+    expect(store.conflict()).toBeNull();
+
+    store.conflict.set({ operation: 'merge', hasConflict: true, oid: 'abc' });
+    store.dismissMergeConflict();
+    expect(store.conflict()).toBeNull();
+  });
+
+  it('a clean merge clears only a merge conflict', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    bridge.invoke.mockImplementation(refsImpl({ merge: () => ({ hasConflict: false, oid: '' }) }));
+
+    store.conflict.set({ operation: 'cherry-pick', hasConflict: true, oid: 'abc' });
+    expect(await store.merge('feature-a', 'MERGE', false, '')).toBe(true);
+    expect(store.conflict()?.operation).toBe('cherry-pick');
+
+    store.conflict.set({ operation: 'merge', hasConflict: true, oid: 'abc' });
+    expect(await store.merge('feature-a', 'MERGE', false, '')).toBe(true);
+    expect(store.conflict()).toBeNull();
+  });
+
+  // -- cherry-pick mutation (ADR-0042) --------------------------------------
+
+  it('cherryPick sends the request, reloads refs, refreshes status and returns true', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    bridge.invoke.mockImplementation(
+      refsImpl({ cherryPick: () => ({ hasConflict: false, oid: 'picked' }) }),
+    );
+    bridge.invoke.mockClear();
+    const before = store.statusRefreshRequested();
+
+    expect(await store.cherryPick('deadbeef', true, false)).toBe(true);
+
+    expect(bridge.invoke).toHaveBeenCalledWith('cherryPick', {
+      repoId: REPO_A.id,
+      source: 'deadbeef',
+      recordOrigin: true,
+      noCommit: false,
+    });
+    expect(store.statusRefreshRequested()).toBe(before + 1);
+    expect(store.conflict()).toBeNull();
+    expect(store.refOpRunning()).toBe(false);
+    // A successful pick moves the branch tip: the ref lists were re-read.
+    expectRefsReloaded(bridge, REPO_A.id);
+  });
+
+  it('cherryPick publishes the conflict from a hasConflict response and returns false', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    bridge.invoke.mockImplementation(
+      refsImpl({ cherryPick: () => ({ hasConflict: true, oid: 'head' }) }),
+    );
+    bridge.invoke.mockClear();
+    const before = store.statusRefreshRequested();
+
+    expect(await store.cherryPick('deadbeef', false, true)).toBe(false);
+
+    expect(store.conflict()).toEqual({ operation: 'cherry-pick', hasConflict: true, oid: 'head' });
+    expect(store.refOpError()).toBeNull();
+    expect(store.statusRefreshRequested()).toBe(before + 1);
+    expectRefsReloaded(bridge, REPO_A.id);
+  });
+
+  it('cherryPick treats a CHERRY_PICK_CONFLICT rejection as a surfaced conflict', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    bridge.invoke.mockImplementation(
+      refsImpl({
+        cherryPick: () => {
+          throw {
+            code: 'CHERRY_PICK_CONFLICT',
+            message: 'conflict',
+            details: { oid: 'head' },
+          } as AppError;
+        },
+      }),
+    );
+    bridge.invoke.mockClear();
+
+    expect(await store.cherryPick('deadbeef', false, false)).toBe(false);
+
+    expect(store.conflict()).toEqual({ operation: 'cherry-pick', hasConflict: true, oid: 'head' });
+    expect(store.refOpError()).toBeNull();
+    // The conflicted pick still updated HEAD: refs are refreshed before the
+    // conflict is surfaced.
+    expectRefsReloaded(bridge, REPO_A.id);
+  });
+
+  it('cherryPick records refOpError on a generic failure and leaves the conflict alone', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    bridge.invoke.mockImplementation(
+      refsImpl({
+        cherryPick: () => {
+          throw { code: 'CHERRY_PICK_FAILED', message: 'boom' } as AppError;
+        },
+      }),
+    );
+    store.conflict.set({ operation: 'merge', hasConflict: true, oid: 'abc' });
+
+    expect(await store.cherryPick('deadbeef', false, false)).toBe(false);
+
+    expect(store.refOpError()).toEqual({
+      code: 'CHERRY_PICK_FAILED',
+      message: 'boom',
+      details: {},
+    });
+    expect(store.conflict()?.operation).toBe('merge');
+  });
+
+  it('cherryPick no-ops without an active repo, a blank source or while running', async () => {
+    expect(await store.cherryPick('deadbeef', false, false)).toBe(false);
+
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    bridge.invoke.mockClear();
+
+    expect(await store.cherryPick('   ', false, false)).toBe(false);
+    expect(bridge.invoke).not.toHaveBeenCalledWith('cherryPick', expect.anything());
+
+    store.refOpRunning.set(true);
+    expect(await store.cherryPick('deadbeef', false, false)).toBe(false);
+    expect(bridge.invoke).not.toHaveBeenCalledWith('cherryPick', expect.anything());
+  });
+
+  // -- revert mutation (ADR-0042) -------------------------------------------
+
+  it('revert sends the request, reloads refs, refreshes status and returns true', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    bridge.invoke.mockImplementation(refsImpl({ revert: () => ({ hasConflict: false, oid: 'rev' }) }));
+    bridge.invoke.mockClear();
+    const before = store.statusRefreshRequested();
+
+    expect(await store.revert('  deadbeef  ')).toBe(true);
+
+    expect(bridge.invoke).toHaveBeenCalledWith('revert', {
+      repoId: REPO_A.id,
+      source: 'deadbeef',
+    });
+    expect(store.statusRefreshRequested()).toBe(before + 1);
+    expect(store.conflict()).toBeNull();
+    // The revert moved HEAD: the ref lists were re-read before settling.
+    expectRefsReloaded(bridge, REPO_A.id);
+  });
+
+  it('revert publishes the conflict from a hasConflict response and returns false', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    bridge.invoke.mockImplementation(refsImpl({ revert: () => ({ hasConflict: true, oid: 'head' }) }));
+    bridge.invoke.mockClear();
+
+    expect(await store.revert('deadbeef')).toBe(false);
+
+    expect(store.conflict()).toEqual({ operation: 'revert', hasConflict: true, oid: 'head' });
+    expect(store.refOpError()).toBeNull();
+    expectRefsReloaded(bridge, REPO_A.id);
+  });
+
+  it('revert treats a REVERT_CONFLICT rejection as a surfaced conflict', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    bridge.invoke.mockImplementation(
+      refsImpl({
+        revert: () => {
+          throw { code: 'REVERT_CONFLICT', message: 'conflict' } as AppError;
+        },
+      }),
+    );
+
+    expect(await store.revert('deadbeef')).toBe(false);
+
+    expect(store.conflict()).toEqual({ operation: 'revert', hasConflict: true, oid: '' });
+  });
+
+  it('revert records refOpError on a generic failure and no-ops when guarded', async () => {
+    expect(await store.revert('deadbeef')).toBe(false);
+
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    bridge.invoke.mockImplementation(
+      refsImpl({
+        revert: () => {
+          throw { code: 'REVERT_FAILED', message: 'boom' } as AppError;
+        },
+      }),
+    );
+
+    expect(await store.revert('deadbeef')).toBe(false);
+    expect(store.refOpError()).toEqual({ code: 'REVERT_FAILED', message: 'boom', details: {} });
+    expect(await store.revert('   ')).toBe(false);
+  });
+
+  // -- cherry-pick preview (ADR-0042) ---------------------------------------
+
+  it('resolveCherryPickSource stores the resolved commit', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    bridge.invoke.mockClear();
+    bridge.invoke.mockImplementation(refsImpl({ resolveRevision: () => COMMIT_A }));
+
+    await store.resolveCherryPickSource('  deadbeef  ');
+
+    expect(bridge.invoke).toHaveBeenCalledWith('resolveRevision', {
+      repoId: REPO_A.id,
+      revision: 'deadbeef',
+    });
+    expect(store.cherryPreview()).toEqual(COMMIT_A);
+    expect(store.cherryPreviewLoading()).toBe(false);
+    expect(store.cherryPreviewError()).toBeNull();
+  });
+
+  it('resolveCherryPickSource clears everything for a blank revision without a call', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    store.cherryPreview.set(COMMIT_A);
+    store.cherryPreviewError.set({ code: 'COMMIT_NOT_FOUND', message: 'nope' });
+    bridge.invoke.mockClear();
+
+    await store.resolveCherryPickSource('   ');
+
+    expect(bridge.invoke).not.toHaveBeenCalledWith('resolveRevision', expect.anything());
+    expect(store.cherryPreview()).toBeNull();
+    expect(store.cherryPreviewLoading()).toBe(false);
+    expect(store.cherryPreviewError()).toBeNull();
+  });
+
+  it('resolveCherryPickSource keeps the newest request when an older one resolves late', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+
+    let resolveSlow: (value: unknown) => void = () => {};
+    let call = 0;
+    bridge.invoke.mockImplementation((method: string) => {
+      if (method !== 'resolveRevision') throw new Error(`unexpected method ${method}`);
+      call += 1;
+      if (call === 1) {
+        return new Promise((resolve) => {
+          resolveSlow = resolve;
+        });
+      }
+      return Promise.resolve(COMMIT_B);
+    });
+
+    const slow = store.resolveCherryPickSource('old');
+    const fast = store.resolveCherryPickSource('new');
+    await fast;
+    expect(store.cherryPreview()).toEqual(COMMIT_B);
+    expect(store.cherryPreviewLoading()).toBe(false);
+
+    resolveSlow(COMMIT_A);
+    await slow;
+
+    expect(store.cherryPreview()).toEqual(COMMIT_B);
+  });
+
+  it('resolveCherryPickSource puts COMMIT_NOT_FOUND on the preview error', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    bridge.invoke.mockImplementation(
+      refsImpl({
+        resolveRevision: () => {
+          throw { code: 'COMMIT_NOT_FOUND', message: 'not found' } as AppError;
+        },
+      }),
+    );
+
+    await store.resolveCherryPickSource('nope');
+
+    expect(store.cherryPreview()).toBeNull();
+    expect(store.cherryPreviewError()).toEqual({
+      code: 'COMMIT_NOT_FOUND',
+      message: 'not found',
+      details: {},
+    });
+    expect(store.cherryPreviewLoading()).toBe(false);
+  });
+
+  // -- cherry-pick state on repository transitions ---------------------------
+
+  it('drops the cherry-pick dialog and preview when the repository changes', async () => {
+    store.setActive(REPO_A);
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-a', 'feature-a']));
+    store.openCherryPick('abc');
+    store.cherryPreview.set(COMMIT_A);
+
+    store.setActive(REPO_B);
+    expect(store.cherryPickDialog()).toBeNull();
+    expect(store.cherryPreview()).toBeNull();
+
+    await vi.waitFor(() => expect(store.branches()).toEqual(['main-b', 'feature-b']));
+    store.openCherryPick('abc');
+    store.cherryPreview.set(COMMIT_A);
+    store.clearActive();
+    expect(store.cherryPickDialog()).toBeNull();
+    expect(store.cherryPreview()).toBeNull();
   });
 });

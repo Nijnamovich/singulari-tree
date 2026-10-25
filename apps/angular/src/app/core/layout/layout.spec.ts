@@ -3,8 +3,9 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import type { Repository, Stash } from '@contracts/domain';
+import type { Commit, Repository, Stash } from '@contracts/domain';
 import type { GitFlowConfig, GitFlowResult, MergeResponse } from '@contracts/gitcore';
+import { BranchLensStore } from '@core/services/branch-lens.store';
 import { CommitFocusService } from '@core/services/commit-focus.service';
 import {
   IpcBridge,
@@ -12,7 +13,7 @@ import {
   type DeepLinkPayload,
   type MenuNavigatePayload,
 } from '@core/services/ipc-bridge.service';
-import { RepoState } from '@core/services/repo-state.service';
+import { RepoState, type ConflictState } from '@core/services/repo-state.service';
 import { WorkspacesStore, type RepoTab } from '@core/services/workspaces.store';
 import { GithubAccountStore } from '@features/github-account/github-account.store';
 import { RemoteOpsStore } from '@features/remote/remote-ops.store';
@@ -105,7 +106,11 @@ interface StubRepoStateOptions {
   checkoutError?: AppError | null;
   refOpRunning?: boolean;
   refOpError?: AppError | null;
-  mergeConflict?: MergeResponse | null;
+  conflict?: ConflictState | null;
+  cherryPickDialog?: { source: string } | null;
+  cherryPreview?: Commit | null;
+  cherryPreviewLoading?: boolean;
+  cherryPreviewError?: AppError | null;
   stashes?: Stash[];
   stashesLoading?: boolean;
   stashesError?: AppError | null;
@@ -122,6 +127,7 @@ interface StubRepoStateOptions {
 function makeRepoState(opts: StubRepoStateOptions = {}) {
   const repos = signal<Repository[]>(opts.repos ?? []);
   const activeId = signal<string | null>(opts.activeId ?? null);
+  const conflict = signal<ConflictState | null>(opts.conflict ?? null);
   return {
     repos,
     activeId,
@@ -147,7 +153,17 @@ function makeRepoState(opts: StubRepoStateOptions = {}) {
     checkoutError: signal<AppError | null>(opts.checkoutError ?? null),
     refOpRunning: signal(opts.refOpRunning ?? false),
     refOpError: signal<AppError | null>(opts.refOpError ?? null),
-    mergeConflict: signal<MergeResponse | null>(opts.mergeConflict ?? null),
+    conflict,
+    mergeConflict: computed<MergeResponse | null>(() => {
+      const current = conflict();
+      return current && current.operation === 'merge'
+        ? { hasConflict: current.hasConflict, oid: current.oid }
+        : null;
+    }),
+    cherryPickDialog: signal<{ source: string } | null>(opts.cherryPickDialog ?? null),
+    cherryPreview: signal<Commit | null>(opts.cherryPreview ?? null),
+    cherryPreviewLoading: signal(opts.cherryPreviewLoading ?? false),
+    cherryPreviewError: signal<AppError | null>(opts.cherryPreviewError ?? null),
     stashes: signal<Stash[]>(opts.stashes ?? []),
     stashesLoading: signal(opts.stashesLoading ?? false),
     stashesError: signal<AppError | null>(opts.stashesError ?? null),
@@ -177,7 +193,13 @@ function makeRepoState(opts: StubRepoStateOptions = {}) {
     clearStashOpError: vi.fn(),
     dismissCheckoutError: vi.fn(),
     clearRefOpError: vi.fn(),
+    dismissConflict: vi.fn(),
     dismissMergeConflict: vi.fn(),
+    cherryPick: vi.fn(async () => true),
+    openCherryPick: vi.fn(),
+    closeCherryPick: vi.fn(),
+    resolveCherryPickSource: vi.fn(async () => {}),
+    revert: vi.fn(async () => true),
     createBranch: vi.fn(async () => true),
     renameBranch: vi.fn(async () => true),
     deleteBranch: vi.fn(async () => true),
@@ -1192,6 +1214,79 @@ describe('LayoutComponent', () => {
     expect(query(fixture, 'checkout-error-banner')).not.toBeNull();
   });
 
+  // -- branch lens (ADR-0042) ----------------------------------------------
+
+  it('clears the lens instead of lensing the current local branch', async () => {
+    const { fixture } = await setup({ branches: ['main', 'feature/x'], currentBranch: 'main' });
+    const lens = TestBed.inject(BranchLensStore);
+    lens.set('feature/x', 'local');
+    const clear = vi.spyOn(lens, 'clear');
+    const toggle = vi.spyOn(lens, 'toggle');
+
+    fixture.componentInstance.onLensToggled({ ref: 'main', kind: 'local' });
+
+    // The current branch's history already is the HEAD walk: never lens it.
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(toggle).not.toHaveBeenCalled();
+    expect(lens.active()).toBe(false);
+    expect(lens.ref()).toBeNull();
+  });
+
+  it('toggles the lens for a non-current local branch', async () => {
+    const { fixture } = await setup({ branches: ['main', 'feature/x'], currentBranch: 'main' });
+    const lens = TestBed.inject(BranchLensStore);
+    const toggle = vi.spyOn(lens, 'toggle');
+
+    fixture.componentInstance.onLensToggled({ ref: 'feature/x', kind: 'local' });
+
+    expect(toggle).toHaveBeenCalledWith('feature/x', 'local');
+    expect(lens.ref()).toBe('feature/x');
+    expect(lens.kind()).toBe('local');
+  });
+
+  it('clears an active lens before opening the local checkout confirmation', async () => {
+    const { fixture, repoState } = await setup({
+      branches: ['main', 'other'],
+      currentBranch: 'main',
+    });
+    const lens = TestBed.inject(BranchLensStore);
+    lens.set('feature/x', 'local');
+    const clear = vi.spyOn(lens, 'clear');
+
+    fixture.componentInstance.onBranchSelected('other');
+
+    // Checkout is the terminal "no lens" state: drop the scope first, then ask.
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(lens.active()).toBe(false);
+    expect(fixture.componentInstance.checkoutPrompt()).toEqual({
+      name: 'other',
+      isRemote: false,
+      mode: 'confirm',
+    });
+    expect(repoState.checkoutBranch).not.toHaveBeenCalled();
+  });
+
+  it('clears an active lens before opening the remote-tracking checkout confirmation', async () => {
+    const { fixture, repoState } = await setup({
+      remotes: ['origin'],
+      remoteBranches: ['origin/other'],
+    });
+    const lens = TestBed.inject(BranchLensStore);
+    lens.set('feature/x', 'local');
+    const clear = vi.spyOn(lens, 'clear');
+
+    fixture.componentInstance.onRemoteBranchSelected('origin/other');
+
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(lens.active()).toBe(false);
+    expect(fixture.componentInstance.checkoutPrompt()).toEqual({
+      name: 'origin/other',
+      isRemote: true,
+      mode: 'confirm',
+    });
+    expect(repoState.checkoutBranch).not.toHaveBeenCalled();
+  });
+
   // -- ref mutation dialogs (ADR-028) --------------------------------------
 
   function openBranchMenu(fixture: { nativeElement: unknown; detectChanges: () => void }, name: string): void {
@@ -1205,14 +1300,14 @@ describe('LayoutComponent', () => {
 
   it('renders and dismisses the merge conflict banner through the store', async () => {
     const { fixture, repoState } = await setup({
-      mergeConflict: { hasConflict: true, oid: 'abc' },
+      conflict: { operation: 'merge', hasConflict: true, oid: 'abc' },
     });
 
     expect(query(fixture, 'merge-conflict-banner')).not.toBeNull();
 
     query<HTMLButtonElement>(fixture, 'merge-conflict-dismiss')!.click();
 
-    expect(repoState.dismissMergeConflict).toHaveBeenCalledTimes(1);
+    expect(repoState.dismissConflict).toHaveBeenCalledTimes(1);
   });
 
   it('opens the create-branch dialog from the sidebar "+" and routes the submit', async () => {
@@ -1341,6 +1436,61 @@ describe('LayoutComponent', () => {
     fixture.detectChanges();
     query<HTMLButtonElement>(fixture, 'branch-create-cancel')!.click();
 
+    expect(repoState.clearRefOpError).toHaveBeenCalled();
+  });
+
+  // -- cherry-pick (ADR-0042) ----------------------------------------------
+
+  const PREVIEW_COMMIT: Commit = {
+    oid: { hex: 'abc1234' + '0'.repeat(33), kind: 'SHA1' },
+    parents: [],
+    author: { name: 'Ada', email: 'ada@example.com', when: '2026-01-02T10:00:00Z' },
+    committer: undefined,
+    message: 'fix: the thing',
+    treeOid: undefined,
+    committedAt: '2026-01-02T10:05:00Z',
+    refs: [],
+  };
+
+  it('opens the cherry-pick dialog from the shared store signal and routes the submit', async () => {
+    const { fixture, repoState } = await setup({
+      branches: ['main', 'feature/x'],
+      currentBranch: 'main',
+      cherryPickDialog: { source: PREVIEW_COMMIT.oid!.hex },
+      cherryPreview: PREVIEW_COMMIT,
+    });
+
+    expect(query(fixture, 'cherry-current')?.textContent).toContain('main');
+    expect(query(fixture, 'cherry-preview')).not.toBeNull();
+
+    query<HTMLButtonElement>(fixture, 'cherry-submit')!.click();
+
+    await vi.waitFor(() =>
+      expect(repoState.cherryPick).toHaveBeenCalledWith(PREVIEW_COMMIT.oid!.hex, false, false),
+    );
+  });
+
+  it('previews the settled cherry-pick source through the store', async () => {
+    const { fixture, repoState } = await setup({
+      branches: ['main'],
+      currentBranch: 'main',
+      cherryPickDialog: { source: 'main' },
+    });
+
+    await vi.waitFor(() =>
+      expect(repoState.resolveCherryPickSource).toHaveBeenCalledWith('main'),
+    );
+    fixture.detectChanges();
+  });
+
+  it('closes the cherry-pick dialog and clears its error on cancel', async () => {
+    const { fixture, repoState } = await setup({
+      cherryPickDialog: { source: 'abc1234' },
+    });
+
+    query<HTMLButtonElement>(fixture, 'cherry-cancel')!.click();
+
+    expect(repoState.closeCherryPick).toHaveBeenCalled();
     expect(repoState.clearRefOpError).toHaveBeenCalled();
   });
 

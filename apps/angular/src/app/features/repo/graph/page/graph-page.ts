@@ -6,6 +6,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -24,6 +25,7 @@ import {
 import { BranchCreateDialog } from '@shared/ui/ref-dialogs/branch-create-dialog';
 import type { BranchCreateValue, TagCreateValue } from '@shared/ui/ref-dialogs/ref-dialog.models';
 import { TagCreateDialog } from '@shared/ui/ref-dialogs/tag-create-dialog';
+import { BranchLensStore } from '@core/services/branch-lens.store';
 import { KeyboardShortcutService } from '@core/services/keyboard-shortcut.service';
 import { RepoState } from '@core/services/repo-state.service';
 import type { CommitRow } from '../../repo-models';
@@ -111,6 +113,32 @@ import { WipRow } from '../ui/wip-row';
         </st-button>
       </header>
 
+      <!--
+        Branch lens (ADR-0042): a view-only ref scope. The bar states the scope
+        in text and offers the one exit; it is a role="status" so the scope is
+        announced, because the graph itself only changes visually (dimmed rows).
+      -->
+      @if (lens.active()) {
+        <div class="st-graph-page__lens" role="status" data-testid="graph-lens-bar">
+          <span class="st-graph-page__lens-label" i18n>Lens</span>
+          <span class="st-graph-page__lens-ref st-mono" data-testid="graph-lens-ref">{{
+            lens.ref()
+          }}</span>
+          <span class="st-graph-page__lens-note" data-testid="graph-lens-note" i18n
+            >Commits outside this ref are dimmed.</span
+          >
+          <st-button
+            variant="ghost"
+            size="sm"
+            class="st-graph-page__lens-clear"
+            data-testid="graph-lens-clear"
+            (click)="lens.clear()"
+          >
+            <span i18n>Clear</span>
+          </st-button>
+        </div>
+      }
+
       @if (store.error(); as error) {
         <p class="st-graph-page__error" data-testid="graph-error">{{ error.message }}</p>
       }
@@ -173,7 +201,9 @@ import { WipRow } from '../ui/wip-row';
             [maxLane]="maxLane()"
             [selected]="store.selectedOid() === row.commit.oid?.hex"
             [stats]="store.statsFor(row.commit.oid?.hex)"
-            (picked)="store.select(row.commit.oid?.hex ?? null)"
+            [lensActive]="lens.active()"
+            [inLens]="store.lensOids().has(row.commit.oid?.hex ?? '')"
+            (picked)="onRowPicked(row)"
             (contextmenu)="onRowContextMenu($event, row)"
           />
         </cdk-virtual-scroll-viewport>
@@ -198,12 +228,16 @@ import { WipRow } from '../ui/wip-row';
         [target]="contextMenuTarget()"
         [canCompare]="canCompare()"
         [busy]="store.resetRunning()"
+        [lensActive]="lens.active()"
+        [currentBranch]="currentBranch()"
         (checkout)="onCheckout($event)"
+        (lensCherryPick)="onLensCherryPick($event)"
         (compare)="onCompare()"
         (fileStatus)="onFileStatus($event)"
         (copySha)="onCopySha($event)"
         (createBranchHere)="onCreateBranchHere($event)"
         (tagCommit)="onTagCommit($event)"
+        (revert)="onRevert($event)"
         (reset)="onReset($event)"
         (closed)="closeContextMenu()"
       />
@@ -258,6 +292,47 @@ import { WipRow } from '../ui/wip-row';
       gap: var(--st-space-2);
       padding: var(--st-space-2) var(--st-space-3);
       border-bottom: var(--st-hairline) solid var(--st-color-border);
+    }
+
+    /* Branch lens bar: a ref-coloured wash + 1px inset marker, never the
+       exclusive current-branch selection treatment. */
+    .st-graph-page__lens {
+      display: flex;
+      align-items: center;
+      gap: var(--st-space-2);
+      flex: none;
+      padding: var(--st-space-1) var(--st-space-3);
+      background: color-mix(in srgb, var(--st-color-ref-branch) 10%, transparent);
+      border-bottom: var(--st-hairline) solid var(--st-color-border);
+      box-shadow: inset 1px 0 0 var(--st-color-ref-branch);
+      font-size: var(--st-font-12);
+    }
+
+    .st-graph-page__lens-label {
+      flex: none;
+      color: var(--st-color-muted);
+      font-size: var(--st-font-10);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .st-graph-page__lens-ref {
+      flex: none;
+      color: var(--st-color-ref-branch);
+      font-weight: 600;
+    }
+
+    .st-graph-page__lens-note {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--st-color-muted);
+    }
+
+    .st-graph-page__lens-clear {
+      flex: none;
+      margin-left: auto;
     }
 
     .st-graph-page__heading {
@@ -371,6 +446,8 @@ import { WipRow } from '../ui/wip-row';
 })
 export class GraphPage {
   readonly store = inject(GraphStore);
+  /** Root, view-only branch lens (ADR-0042); the bar and row dimming read it. */
+  readonly lens = inject(BranchLensStore);
 
   private readonly shortcuts = inject(KeyboardShortcutService);
   private readonly destroyRef = inject(DestroyRef);
@@ -498,6 +575,43 @@ export class GraphPage {
       this.bindViewportScroll(viewport);
       if (viewport) this.restoreScroll();
     });
+
+    // Branch lens (ADR-0042): a changed scope means a different walk
+    // (HEAD ∪ ref), so reload from the top. Only a real value change reloads —
+    // the first run is skipped so mounting the page never re-requests the
+    // window the store already loaded, and re-running with the same value is a
+    // no-op.
+    let previousLensRef = this.lens.ref();
+    let lensInitialised = false;
+    effect(() => {
+      const next = this.lens.ref();
+      if (!lensInitialised) {
+        lensInitialised = true;
+        previousLensRef = next;
+        return;
+      }
+      if (next === previousLensRef) return;
+      previousLensRef = next;
+      untracked(() => {
+        // Queue (then deliberately discard, via `reloadForLens`) the previous
+        // position: a remembered offset from the old scope must not restore.
+        this.queueScrollRestore();
+        this.store.reloadForLens();
+        this.resetViewportToTop();
+      });
+    });
+  }
+
+  /**
+   * Scroll the viewport back to the top after a lens change. Guarded on
+   * `Element.scrollTo`: jsdom (unit specs) has no implementation, and the CDK
+   * viewport's `scrollToOffset` would throw there.
+   */
+  private resetViewportToTop(): void {
+    const viewport = this.viewport();
+    if (!viewport) return;
+    if (typeof viewport.elementRef.nativeElement.scrollTo !== 'function') return;
+    viewport.scrollToOffset(0);
   }
 
   /**
@@ -551,6 +665,18 @@ export class GraphPage {
   selectWip(): void {
     this.store.select(WIP_OID);
     this.openChanges();
+  }
+
+  /**
+   * Commit-row activation. Selecting is always safe; inside a branch lens the
+   * click also opens the shared cherry-pick dialog for that commit, because a
+   * lens is read-only and cherry-pick is the only mutation offered on a lensed
+   * commit (ADR-0042). With no lens the row keeps its select-only behaviour.
+   */
+  onRowPicked(row: CommitRow): void {
+    const oid = row.commit.oid?.hex ?? null;
+    this.store.select(oid);
+    if (this.lens.active() && oid) this.repoState.openCherryPick(oid);
   }
 
   /**
@@ -637,6 +763,16 @@ export class GraphPage {
   }
 
   /**
+   * Lens-tier cherry-pick: close the menu and hand the source oid to
+   * `RepoState`, which owns the shared dialog state. R2 owns the mutation and
+   * the dialog component; this page only opens it.
+   */
+  onLensCherryPick(oid: string): void {
+    this.closeContextMenu();
+    this.repoState.openCherryPick(oid);
+  }
+
+  /**
    * Reset entries: soft/mixed run immediately; hard opens the confirmation gate
    * first (ADR-0021 item 3) and only runs once the user confirms.
    */
@@ -686,6 +822,17 @@ export class GraphPage {
     this.closeContextMenu();
     this.repoState.clearRefOpError();
     this.tagDialog.set({ target: oid });
+  }
+
+  /**
+   * "Revert this commit…" runs on the checked-out branch (ADR-0042), so no
+   * dialog is needed: `RepoState` performs the revert and, on a conflict,
+   * surfaces it through the shared conflict banner.
+   */
+  onRevert(oid: string): void {
+    this.closeContextMenu();
+    this.repoState.clearRefOpError();
+    void this.repoState.revert(oid);
   }
 
   onTagCreateSubmitted(value: TagCreateValue): void {
