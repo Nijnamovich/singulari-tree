@@ -670,9 +670,10 @@ type GetCommitsResponse struct {
 	Lanes []*Lane `protobuf:"bytes,3,rep,name=lanes,proto3" json:"lanes,omitempty"` // parallel to `commits`: lanes[i] belongs to commits[i]
 	// Parallel-array contract for the branch lens (ADR-0042): in_refs[i] is true
 	// when commits[i] is reachable from the requested `refs`, i.e. it belongs to
-	// the lensed branch/tag. Always empty when the request had no refs (the
-	// renderer then renders exactly today's graph).
-	InRefs        []bool `protobuf:"varint,4,rep,packed,name=in_refs,json=inRefs,proto3" json:"in_refs,omitempty"` // parallel to `commits`, same length as `refs` non-empty
+	// the lensed branch/tag. It is always parallel to `commits` (same length) and
+	// left empty when the request carried no refs — the renderer then renders
+	// exactly today's graph and pays for no membership walk.
+	InRefs        []bool `protobuf:"varint,4,rep,packed,name=in_refs,json=inRefs,proto3" json:"in_refs,omitempty"` // parallel to `commits`, same length
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

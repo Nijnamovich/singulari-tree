@@ -127,8 +127,9 @@ export interface GetCommitsResponse {
   /**
    * Parallel-array contract for the branch lens (ADR-0042): in_refs[i] is true
    * when commits[i] is reachable from the requested `refs`, i.e. it belongs to
-   * the lensed branch/tag. Always empty when the request had no refs (the
-   * renderer then renders exactly today's graph).
+   * the lensed branch/tag. It is always parallel to `commits` (same length) and
+   * left empty when the request carried no refs — the renderer then renders
+   * exactly today's graph and pays for no membership walk.
    */
   inRefs: boolean[];
 }
