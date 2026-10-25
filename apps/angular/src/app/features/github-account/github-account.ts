@@ -81,6 +81,9 @@ const SOURCE_LABELS: Record<AuthSource, string> = {
   styles: `
     :host {
       display: block;
+      height: 100%;
+      min-height: 0;
+      overflow: auto;
       padding: var(--st-space-4);
       color: var(--st-color-text);
     }

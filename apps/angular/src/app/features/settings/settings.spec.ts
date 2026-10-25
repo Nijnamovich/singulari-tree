@@ -171,6 +171,27 @@ describe('Settings', () => {
     expect(segment(fixture, 'settings-language', 'es').textContent).toContain('ES');
   });
 
+  // A repeated group label ("Preferences" on every panel) carried no
+  // information; each panel now names its own group.
+  it('labels every panel with a distinct eyebrow', () => {
+    const { fixture } = setup();
+
+    const labels = [
+      'settings-panel-appearance',
+      'settings-panel-workspace',
+      'settings-panel-diff',
+      'settings-panel-language',
+      'settings-about',
+    ].map((panel) => {
+      const eyebrow = host(fixture, panel).querySelector('.st-eyebrow');
+      expect(eyebrow).not.toBeNull();
+      return (eyebrow?.textContent ?? '').trim();
+    });
+
+    expect(labels.every((label) => label.length > 0)).toBe(true);
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
   it('reflects the persisted theme and language as active', () => {
     localStorage.setItem('st:theme', 'light');
     localStorage.setItem(LANGUAGE_STORAGE_KEY, 'es');

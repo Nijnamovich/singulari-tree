@@ -54,31 +54,96 @@
 }
 
 /* Responsive shell (plan §5 P6). At ≤1100 the rail leaves the left column and
-   becomes a full-width strip above the workspace. This descendant selector
-   deliberately outranks the component's `:host` width rule, so no `!important`
-   is needed. */
+   becomes a full-width strip above the workspace. The body switches to a grid
+   (not a wrapping flex row) because a wrapped flex line has no definite
+   cross-size: `height: 100%` on a routed page would resolve to `auto`, the line
+   would grow to the content height and `.st-router-host` would never detect
+   overflow — so nothing would scroll and `.st-body { overflow: hidden }` would
+   clip the page. With `grid-template-rows: auto minmax(96px, 1fr)` the routed
+   region always owns a definite row and stays the single scroll container.
+   The floor is needed because the rail's `40vh` cap is not bounded by the body
+   height: when in-flow shell banners (checkout error / merge conflict) shrink
+   the body, row 1 alone can exceed it and the `fr` track would otherwise
+   resolve to 0, leaving the routed page unreachable. Overflow is then clipped
+   at the bottom instead — deliberately, the same trade-off the ≤800 block
+   below documents.
+   These descendant selectors deliberately outrank the components' `:host`
+   width rules, so no `!important` is needed. */
 @media (max-width: 1100px) {
   .st-body {
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto minmax(96px, 1fr);
   }
 
+  /* The rail keeps its own `overflow: auto`; capping the strip stops a long
+     branch list from starving the routed row below it. */
   .st-body st-nav-rail {
-    flex: 1 1 100%;
+    grid-column: 1 / -1;
+    grid-row: 1;
     width: 100%;
     min-width: 0;
+    max-height: 40vh;
+  }
+
+  .st-body .st-router-host {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .st-body st-repo-drawer {
+    grid-column: 2;
+    grid-row: 2;
   }
 }
 
 /* At ≤800 the drawer leaves the right column and becomes a full-width bottom
    strip. Its pinned width is set on the component host, so this shell
-   descendant selector is the reliable override lever. */
+   descendant selector is the reliable override lever; the `:not(...)` keeps the
+   floating popover (`position: fixed`, top-to-bottom overlay) out of these
+   grid-derived dimensions.
+   At this breakpoint both pinned strips are secondary navigation, not reading
+   surfaces: the rail is a wrapped chip strip and the drawer a repository card
+   list. Stacked above and below the routed row, the caps inherited from ≤1100
+   (rail 40vh) plus the drawer's 30vh left the routed row at 85px in an 800×600
+   window with a content-tall rail (~135px with a short one) — the history list
+   inside it measured a 0px viewport, i.e. nothing was reachable but the chrome.
+   Both strips are now capped at 25vh (still `overflow: auto`, so they scroll)
+   and the routed-row floor is 96px instead of 72px. The drawer needs all of
+   those 25vh: its own head + search is 93px, so a tighter cap would hide even
+   the first repository card. Measured in the real shell at 800×600, the routed
+   row goes 85px → 205px and its history list viewport 0px → 70px, while the
+   drawer still shows one whole card; the floor keeps the row non-zero when
+   in-flow shell banners (checkout error / merge conflict, siblings of
+   `.st-body`) consume body height. The 1024×600 and 1280×800 layouts are
+   unchanged (measured identical before/after) — these rules only exist inside
+   this query. */
 @media (max-width: 800px) {
-  .st-body st-repo-drawer {
-    flex: 1 1 100%;
+  .st-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(96px, 1fr) auto;
+  }
+
+  .st-body st-nav-rail {
+    grid-column: 1;
+    grid-row: 1;
+    max-height: 25vh;
+  }
+
+  .st-body .st-router-host {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .st-body st-repo-drawer:not(.st-drawer-host--floating) {
+    grid-column: 1;
+    grid-row: 3;
     width: 100%;
     min-width: 0;
     border-left: 0;
     border-top: var(--st-hairline) solid var(--st-color-border);
+    max-height: 25vh;
+    overflow: auto;
   }
 }
 

@@ -52,7 +52,7 @@ import {
 
       <st-panel data-testid="settings-panel-appearance">
         <div header class="st-settings__head">
-          <span class="st-eyebrow" i18n>Preferences</span>
+          <span class="st-eyebrow" i18n>Display</span>
           <span class="st-settings__panel-title" i18n>Appearance</span>
         </div>
         <div class="st-settings__body">
@@ -81,7 +81,7 @@ import {
 
       <st-panel data-testid="settings-panel-workspace">
         <div header class="st-settings__head">
-          <span class="st-eyebrow" i18n>Preferences</span>
+          <span class="st-eyebrow" i18n>Layout</span>
           <span class="st-settings__panel-title" i18n>Workspace</span>
         </div>
         <div class="st-settings__body">
@@ -112,7 +112,7 @@ import {
 
       <st-panel data-testid="settings-panel-diff">
         <div header class="st-settings__head">
-          <span class="st-eyebrow" i18n>Preferences</span>
+          <span class="st-eyebrow" i18n>Review</span>
           <span class="st-settings__panel-title" i18n>Diff</span>
         </div>
         <div class="st-settings__body">
@@ -154,7 +154,7 @@ import {
 
       <st-panel data-testid="settings-panel-language">
         <div header class="st-settings__head">
-          <span class="st-eyebrow" i18n>Preferences</span>
+          <span class="st-eyebrow" i18n>Localization</span>
           <span class="st-settings__panel-title" i18n>Language</span>
         </div>
         <div class="st-settings__body">
@@ -192,6 +192,9 @@ import {
   styles: `
     :host {
       display: block;
+      height: 100%;
+      min-height: 0;
+      overflow: auto;
       padding: var(--st-space-4);
       color: var(--st-color-text);
     }
@@ -210,10 +213,12 @@ import {
       line-height: var(--st-leading-tight);
     }
 
+    /* Eyebrow + title read as one header block; the type's own leading is the
+       only separation (a 2px gap sat off the 4px grid and added nothing). */
     .st-settings__head {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 0;
       min-width: 0;
     }
 
