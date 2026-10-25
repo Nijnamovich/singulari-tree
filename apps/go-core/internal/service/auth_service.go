@@ -14,7 +14,7 @@ type TokenSource interface {
 }
 
 // AuthConfig carries the resolved configuration the AuthService needs for
-// diagnostics (github-real-data-guide.md §12a).
+// diagnostics (github-real-data-guide.md §13 item 1).
 type AuthConfig struct {
 	GhSearchPath string
 }

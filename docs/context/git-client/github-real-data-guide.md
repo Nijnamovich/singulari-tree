@@ -1,6 +1,6 @@
 # GitHub as a real data source — connection via `gh` CLI
 
-> **Design plan for human validation before implementing.** This document does NOT describe existing code: it proposes a design and its contract additions. Nothing here should be implemented until a human approves section 11. It coexists with the legacy docs in `git-client/` (no frontmatter, excluded from the validator).
+> **Design record — approved and implemented.** Sections 1–12 were approved and implemented end-to-end in this iteration, with the six §12 adjustments applied; this page is kept as the design record plus implementation status, not as a pending proposal. See §13 for implementation status and §12 for the adjustments as requested. The "Explicitly out" list in §1 states the pre-implementation scope and is only partly superseded: the adapters/IPC/handlers/renderer work and the `gen/{go,ts}` regeneration are implemented, while the OAuth app flow, the SQLite migration and `buf` wiring in CI remain deferred as recorded in §13. It coexists with the legacy docs in `git-client/` as a frozen tree (no frontmatter, excluded from the validator).
 
 ## 1. Objective and scope
 
@@ -301,7 +301,7 @@ npm test --workspace=@singularitree/angular                           # renderer
 
 An independent second opinion (model from another family) reviewed this plan: **verdict `revise`**, confidence 0.72. The design is directionally correct, but it demands six adjustments before implementing. They are recorded here for human validation.
 
-1. **`gh` and the child's PATH (HS1).** The supervisor launches go-core with `spawn(bin, args)` without an explicit `env` (`apps/electron/src/main/supervisor.ts`), so the core inherits Electron's environment. On macOS launched from Finder/Launcher, the PATH is the stub (`/usr/bin:/bin:/usr/sbin:/sbin`) and `gh` (Homebrew, `/opt/homebrew/bin`) would not be found. Adjustment: add a configuration knob `SINGULARITREE_GH_PATH` (pattern `getEnv` from `internal/config/config.go`, pattern of `gh_binary` already in `ConnectGitHubFromCLIRequest`), include the searched PATH in `error.details` of `GH_CLI_NOT_FOUND`, and an early check to diagnose within the first seconds.
+1. **`gh` and the child's PATH (HS1).** The supervisor launches go-core with `spawn(bin, args)` without an explicit `env` (`apps/electron/src/main/supervisor.ts`), so the core inherits Electron's environment. On macOS launched from Finder/Launcher, the PATH is the stub (`/usr/bin:/bin:/usr/sbin:/sbin`) and `gh` (Homebrew, `/opt/homebrew/bin`) would not be found. Adjustment: add a configuration knob `SINGULARITREE_GH_PATH` (pattern `getEnv` from `internal/config/config.go`, pattern of `gh_binary` already in `ConnectGitHubFromCLIRequest`), include the searched PATH in `error.details` of `GH_CLI_NOT_FOUND`, and an early check to diagnose within the first seconds. **As implemented this became one resolver with a three-step precedence, not the knob alone — see §13, item 1.**
 2. **Pagination (HS2).** `total` is unknowable in `/user/repos` (there is no `X-Total-Count`). Adjustment: document `PageInfo.total` as "best-effort, 0 = unknown" (already annotated in proto §5), **set the default of `sort`** (`full_name`) so that page boundaries are stable, and note that GitHub clamps `per_page` to 100.
 3. **Cache/ETag correction (HS3+HS4).** A `304` brings no body: `(key, etag, body)` must be persisted atomically. Adjustment: honor `304` only if a body exists for that `etag`; **invalidate rows including the etags** when switching account/token; and **pin the cache per account** (`account_login`) so that a new token does not serve data from another account.
 4. **Separate `Auth` service (HS1/HS6).** It is confirmed as the lowest-risk option (additive; `auth.proto` already declares `service Auth`). Implementation adjustment: the service-aware refactor must keep the `satisfies Record<ChannelName, string>` check of `channels.ts` green for both services and must not drop `auth:*` into the `isStreamingRpc` guard (which is GitCore-shaped); the second client must follow the same reconnection path (`supervisor.ts` → `connectClient`).
@@ -318,7 +318,7 @@ The plan §1-§12 was **approved and implemented end-to-end** in this iteration,
 |---|---|
 | Contracts proto | **Additive** additions to `auth.proto` (§5.1) and `errors.proto` (§5.2) + regeneration of `gen/{go,ts}` via `buf generate`. |
 | Go core — `Auth` service | `RegisterAuthServer` registered alongside `GitCore` in `apps/go-core/internal/adapter/grpc/server.go`. |
-| Go core — token | Token via `gh auth token` in `apps/go-core/internal/adapter/ghcli/`, with the `SINGULARITREE_GH_PATH` knob (§12.1). |
+| Go core — token | Token via `gh auth token` in `apps/go-core/internal/adapter/ghcli/`, with the single resolver behind it (`SINGULARITREE_GH_PATH` → `PATH` → well-known install dirs; §13 item 1). |
 | Go core — GitHub REST | `apps/go-core/internal/adapter/github/`: pagination via `Link rel="next"`, rate limit by headers and **in-memory ETag** cache. |
 | Go core — service | `AuthService` (`apps/go-core/internal/service/auth_service.go`). |
 | Electron | Second gRPC client `Auth` + `auth:*` **non-streaming** channels (they do not fall into GitCore's `isStreamingRpc` guard). |
@@ -327,7 +327,7 @@ The plan §1-§12 was **approved and implemented end-to-end** in this iteration,
 
 **Adjustments from §12 applied:**
 
-1. **(a) `gh` and child PATH** — `gh` resolution with the `SINGULARITREE_GH_PATH` knob; `GH_CLI_NOT_FOUND.details` includes the searched PATH.
+1. **(a) `gh` and child PATH** — resolution is one shared code path in `apps/go-core/internal/adapter/ghcli/token_source.go` (`SearchedPathFor` → `LookupFor`, consumed by both the boot diagnostic and `Token`, so the two cannot disagree), in this precedence: the explicit `SINGULARITREE_GH_PATH` dirs → the inherited `PATH` → the platform's well-known install dirs (Windows: `%LOCALAPPDATA%\Programs\GitHub CLI`, `%LOCALAPPDATA%\Microsoft\WinGet\Links`, `%LOCALAPPDATA%\GitHubCLI\bin`, `%USERPROFILE%\scoop\shims`, `%ProgramFiles%\GitHub CLI`, `%ProgramFiles(x86)%\GitHub CLI`; Unix: `/usr/local/bin`, `/opt/homebrew/bin`, `~/.local/bin`), with `PATHEXT` probing on Windows, empty entries skipped and duplicates removed (case-insensitive on Windows); the same combined list is exported to the child as `PATH`. `GH_CLI_NOT_FOUND.details` carries `binary` + `searched_path`, and the message names the next action (`winget install --id GitHub.cli` or `scoop install gh`, then `gh auth login`).
 2. **(b) Pagination** — `PageInfo.total` best-effort (`0` = unknown); default `sort` = `full_name`; `per_page` clamped to 100 by GitHub.
 3. **(c) Cache/ETag** — `304` honored only with a body for that `etag`; cache pinned by `account_login` and invalidated on token change.
 4. **(d) Separate `Auth` service** — the `satisfies Record<ChannelName, string>` of `channels.ts` stays green for both services; the second client follows the same reconnection path (`supervisor.ts` → `connectClient`).
@@ -339,7 +339,7 @@ The plan §1-§12 was **approved and implemented end-to-end** in this iteration,
 - **SQLite migration (HS4)** to persist the ETag cache: this iteration uses an **in-memory** cache with `TODO(HS4)`, subject to separate approval.
 - **Migration of `LayoutComponent`/static shell to `RepoState`/`GraphStore`** (§12f): the shell outlet is still hidden; the vertical is reached at `/github-account`.
 - **OAuth app flow** and `ExchangeCodeResponse.access_token` remain unwired.
-- **`gh` resolution on Windows**: the POSIX executable bit check is unreliable; revisit at packaging time.
+- **~~`gh` resolution on Windows~~ — RETIRED (2026-10-24).** The POSIX executable-bit check is no longer the gate: on Windows any existing non-directory candidate is considered runnable (mirroring `os/exec`'s own `chkStat`), `gh.exe` is found by probing `PATHEXT`, and the well-known installer directories above are searched after `PATH`, so a packaged build no longer depends on the process `PATH` containing the GitHub CLI. What remains actionable is the user-facing error: `GH_CLI_NOT_FOUND` names the install command (`winget install --id GitHub.cli` / `scoop install gh`) plus `gh auth login`, and `GH_CLI_UNAUTHENTICATED` names `gh auth login`.
 
 **Canonical verification executed (all green):**
 
