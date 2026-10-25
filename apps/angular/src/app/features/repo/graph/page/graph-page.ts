@@ -263,7 +263,8 @@ import { WipRow } from '../ui/wip-row';
     .st-graph-page__heading {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      /* Eyebrow over title: leading alone separates the two lines. */
+      gap: 0;
       flex: none;
       min-width: 0;
     }
@@ -303,7 +304,7 @@ import { WipRow } from '../ui/wip-row';
 
     .st-graph-page__error {
       margin: 0;
-      padding: 6px var(--st-space-3);
+      padding: var(--st-space-1) var(--st-space-3);
       font-size: var(--st-font-12);
       color: var(--st-color-danger);
     }

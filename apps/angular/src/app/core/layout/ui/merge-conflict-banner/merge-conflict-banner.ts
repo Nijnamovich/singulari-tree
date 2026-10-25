@@ -39,8 +39,8 @@ import type { MergeResponse } from '@contracts/gitcore';
     .st-merge-conflict {
       display: flex;
       align-items: flex-start;
-      gap: 10px;
-      padding: 8px 12px;
+      gap: var(--st-space-2);
+      padding: var(--st-space-2) var(--st-space-3);
       background: var(--st-color-warn-soft);
       border-bottom: 1px solid var(--st-color-warn);
       color: var(--st-color-warn);
@@ -61,7 +61,7 @@ import type { MergeResponse } from '@contracts/gitcore';
       color: var(--st-color-warn);
       border-radius: 4px;
       cursor: pointer;
-      padding: 1px 6px;
+      padding: var(--st-hairline) var(--st-space-2);
       line-height: 1.4;
     }
 

@@ -64,8 +64,8 @@ function readConflictPaths(error: AppError | null): string[] | null {
     .st-checkout-error {
       display: flex;
       align-items: flex-start;
-      gap: 10px;
-      padding: 8px 12px;
+      gap: var(--st-space-2);
+      padding: var(--st-space-2) var(--st-space-3);
       background: var(--st-color-danger-soft);
       border-bottom: 1px solid var(--st-color-danger);
       color: var(--st-color-danger);
@@ -83,7 +83,7 @@ function readConflictPaths(error: AppError | null): string[] | null {
     }
 
     .st-checkout-error__paths {
-      margin: 6px 0 0;
+      margin: var(--st-space-1) 0 0;
       padding-left: 18px;
       max-height: 120px;
       overflow: auto;
@@ -102,7 +102,7 @@ function readConflictPaths(error: AppError | null): string[] | null {
       color: var(--st-color-danger);
       border-radius: 4px;
       cursor: pointer;
-      padding: 1px 6px;
+      padding: var(--st-hairline) var(--st-space-2);
       line-height: 1.4;
     }
 

@@ -121,14 +121,14 @@ export type SwitchBranchMode = 'confirm' | 'dirty' | 'untracked';
     }
 
     .st-switch__hint {
-      margin: 10px 0 0;
+      margin: var(--st-space-3) 0 0;
       font-size: var(--st-font-12);
       line-height: var(--st-leading-ui);
       color: var(--st-color-muted);
     }
 
     .st-switch__warning {
-      margin: 10px 0 0;
+      margin: var(--st-space-3) 0 0;
       font-size: var(--st-font-12);
       line-height: var(--st-leading-ui);
       color: var(--st-color-danger);
@@ -137,7 +137,7 @@ export type SwitchBranchMode = 'confirm' | 'dirty' | 'untracked';
     .st-switch__check {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: var(--st-space-2);
       margin-top: var(--st-space-3);
       font-size: var(--st-font-12);
     }

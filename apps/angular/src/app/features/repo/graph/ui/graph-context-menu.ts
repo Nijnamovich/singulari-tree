@@ -224,7 +224,7 @@ import { WIP_OID } from '../graph.store';
       align-items: center;
       gap: var(--st-space-2);
       width: 100%;
-      padding: 6px 10px;
+      padding: var(--st-space-1) var(--st-space-3);
       background: transparent;
       border: 0;
       border-radius: var(--st-radius-3);
@@ -262,12 +262,12 @@ import { WIP_OID } from '../graph.store';
 
     .st-graph-context-menu__separator {
       height: var(--st-hairline);
-      margin: 4px 6px;
+      margin: var(--st-space-1) var(--st-space-2);
       background: var(--st-color-border);
     }
 
     .st-graph-context-menu__group {
-      padding: 4px 10px 2px;
+      padding: var(--st-space-1) var(--st-space-3) 0;
       color: var(--st-color-muted);
       font-size: var(--st-font-10);
       text-transform: uppercase;

@@ -322,7 +322,7 @@ export interface TopBarTab {
       color: var(--st-color-muted);
       font-size: var(--st-font-13);
       line-height: 1;
-      padding: 0 2px;
+      padding: 0;
       cursor: pointer;
     }
 

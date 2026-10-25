@@ -205,7 +205,7 @@ const STATUS_ORDER = ['A', 'M', 'D', 'R'];
       display: flex;
       align-items: center;
       gap: var(--st-space-2);
-      padding: 2px 4px;
+      padding: var(--st-space-1);
       border-radius: var(--st-radius-1);
     }
 
@@ -221,7 +221,7 @@ const STATUS_ORDER = ['A', 'M', 'D', 'R'];
       border: var(--st-hairline) solid var(--st-color-border);
       border-radius: var(--st-radius-1);
       font-family: var(--st-font-mono);
-      font-size: 10px;
+      font-size: var(--st-font-10);
       text-align: center;
       text-transform: uppercase;
     }
@@ -252,7 +252,7 @@ const STATUS_ORDER = ['A', 'M', 'D', 'R'];
       flex: 0 0 auto;
       display: flex;
       gap: var(--st-space-2);
-      font-size: 11px;
+      font-size: var(--st-font-11);
     }
 
     .st-file-diff-list__additions {
