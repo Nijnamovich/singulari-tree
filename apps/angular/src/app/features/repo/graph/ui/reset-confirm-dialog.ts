@@ -50,7 +50,7 @@ import { ModalComponent } from '@shared/ui/modal/modal';
   `,
   styles: `
     .st-reset-confirm__warning {
-      margin: 0 0 10px;
+      margin: 0 0 var(--st-space-3);
       line-height: var(--st-leading-ui);
     }
 

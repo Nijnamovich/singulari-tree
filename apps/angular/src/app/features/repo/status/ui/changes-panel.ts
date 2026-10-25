@@ -152,9 +152,9 @@ import {
       flex-direction: column;
       flex: 1 1 auto;
       min-height: 0;
-      gap: 8px;
-      padding: 8px 12px;
-      font-size: 12px;
+      gap: var(--st-space-2);
+      padding: var(--st-space-2) var(--st-space-3);
+      font-size: var(--st-font-12);
     }
 
     /* The scrollable region: it takes all the slack, so a short list still
@@ -164,7 +164,7 @@ import {
       flex-direction: column;
       flex: 1 1 auto;
       min-height: 0;
-      gap: 10px;
+      gap: var(--st-space-3);
       overflow-y: auto;
       overflow-x: hidden;
     }
@@ -183,8 +183,8 @@ import {
       display: flex;
       align-items: center;
       gap: var(--st-space-2);
-      padding: 2px 4px;
-      border-radius: 4px;
+      padding: var(--st-space-1);
+      border-radius: var(--st-radius-2);
       cursor: pointer;
     }
 
@@ -217,7 +217,7 @@ import {
       display: flex;
       flex-direction: column;
       flex: none;
-      gap: 6px;
+      gap: var(--st-space-2);
       border-top: var(--st-hairline) solid var(--st-color-border);
       padding-top: var(--st-space-2);
     }

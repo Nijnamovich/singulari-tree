@@ -671,7 +671,7 @@ export const TOOLTIP_MAX_WIDTH = 320;
     /* Host-opted-in picking: the shared selectable-row directive owns the
        hover/selected treatment; this only adds the inline-row geometry. */
     .st-commit-details__file-path--selectable {
-      padding: 2px 4px;
+      padding: var(--st-space-1);
       border-radius: var(--st-radius-1);
     }
 
@@ -732,7 +732,7 @@ export const TOOLTIP_MAX_WIDTH = 320;
     }
 
     .st-commit-details__ref {
-      padding: 1px 6px;
+      padding: var(--st-hairline) var(--st-space-2);
       border-radius: var(--st-radius-pill);
       border: var(--st-hairline) solid currentColor;
       font-size: var(--st-font-10);

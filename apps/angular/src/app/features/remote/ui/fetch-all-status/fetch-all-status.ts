@@ -77,7 +77,7 @@ import type { RepoFetchState } from '../../remote-models';
     .st-fetch-all__failed {
       display: inline-flex;
       align-items: center;
-      gap: 2px;
+      gap: var(--st-space-1);
       color: var(--st-color-remove);
     }
 

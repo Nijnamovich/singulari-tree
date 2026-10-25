@@ -129,7 +129,8 @@ import {
     .st-repos-page__head {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      /* Eyebrow over title: leading alone separates the two lines. */
+      gap: 0;
       min-width: 0;
     }
 

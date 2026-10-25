@@ -102,7 +102,7 @@ func main() {
 	cfg := config.Load()
 
 	// Early, non-fatal diagnostic: warn when `gh` cannot be resolved so the user
-	// learns within the first seconds (github-real-data-guide.md §12a).
+	// learns within the first seconds (github-real-data-guide.md §13 item 1).
 	if _, ok := ghcli.Lookup(ghcli.SearchedPath(cfg.GhPath), "gh"); !ok {
 		logf(levelWarn, "gh CLI not found (searched: %s)", ghcli.SearchedPath(cfg.GhPath))
 	}

@@ -464,7 +464,9 @@ interface RowMenu {
     .st-rail__repo {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      /* Name / branch / path are one stacked identity block: the line boxes
+         already separate them, so no synthetic gap (was an off-grid 2px). */
+      gap: 0;
       padding: var(--st-space-3);
       border-bottom: var(--st-hairline) solid var(--st-color-border);
       min-width: 0;
@@ -535,7 +537,7 @@ interface RowMenu {
       color: var(--st-color-muted);
       border-radius: var(--st-radius-2);
       cursor: pointer;
-      padding: 2px;
+      padding: var(--st-space-1);
       margin-right: var(--st-space-2);
     }
 
@@ -670,7 +672,7 @@ interface RowMenu {
     .st-rail__stash-actions {
       display: flex;
       flex: none;
-      gap: 2px;
+      gap: var(--st-space-1);
     }
 
     .st-rail__stash-actions button {
@@ -681,7 +683,7 @@ interface RowMenu {
       cursor: pointer;
       font: inherit;
       font-size: var(--st-font-11);
-      padding: 1px 6px;
+      padding: var(--st-hairline) var(--st-space-2);
     }
 
     .st-rail__stash-actions button:hover:not(:disabled) {
@@ -756,7 +758,7 @@ interface RowMenu {
       color: var(--st-color-muted);
       border-radius: var(--st-radius-2);
       cursor: pointer;
-      padding: 2px 8px;
+      padding: var(--st-space-1) var(--st-space-2);
     }
 
     .st-rail__collapse:hover {

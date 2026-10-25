@@ -244,7 +244,7 @@ import type { AppError } from '@core/services/ipc-bridge.service';
       color: var(--st-color-muted);
       border-radius: var(--st-radius-2);
       cursor: pointer;
-      padding: 3px 6px;
+      padding: var(--st-space-1) var(--st-space-2);
       font-size: var(--st-font-12);
       line-height: 1;
     }
