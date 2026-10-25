@@ -1,12 +1,14 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import type { MergeResponse } from '@contracts/gitcore';
+import type { ConflictOperation, ConflictState } from '@core/services/repo-state.service';
 
 /**
- * Dumb notice shown when a merge produced conflicts (ADR-028).
+ * Dumb notice shown when a merge, cherry-pick or revert produced conflicts
+ * (ADR-028, ADR-0042).
  *
- * M3 surfaces conflicts instead of resolving them: the banner tells the user the
- * tree is conflicted and that resolved files must be committed. The parent owns
- * the conflict state and the dismiss side effect; this component only renders.
+ * Every one of those operations leaves the tree conflicted and there is no
+ * in-app resolver: the banner tells the user which operation conflicted and
+ * that resolved files must be committed. The parent owns the conflict state and
+ * the dismiss side effect; this component only renders.
  */
 @Component({
   selector: 'st-merge-conflict-banner',
@@ -15,9 +17,19 @@ import type { MergeResponse } from '@contracts/gitcore';
   template: `
     @if (conflict()?.hasConflict) {
       <div class="st-merge-conflict" role="alert" data-testid="merge-conflict-banner">
-        <p class="st-merge-conflict__message" data-testid="merge-conflict-message" i18n>
-          The merge produced conflicts. Resolve them in the working tree, then commit.
-        </p>
+        @if (operation() === 'cherry-pick') {
+          <p class="st-merge-conflict__message" data-testid="merge-conflict-message" i18n>
+            The cherry-pick produced conflicts. Resolve them in the working tree, then commit.
+          </p>
+        } @else if (operation() === 'revert') {
+          <p class="st-merge-conflict__message" data-testid="merge-conflict-message" i18n>
+            The revert produced conflicts. Resolve them in the working tree, then commit.
+          </p>
+        } @else {
+          <p class="st-merge-conflict__message" data-testid="merge-conflict-message" i18n>
+            The merge produced conflicts. Resolve them in the working tree, then commit.
+          </p>
+        }
         <button
           class="st-merge-conflict__dismiss"
           type="button"
@@ -71,6 +83,9 @@ import type { MergeResponse } from '@contracts/gitcore';
   `,
 })
 export class MergeConflictBanner {
-  readonly conflict = input<MergeResponse | null>(null);
+  /** The conflict, including which operation produced it. */
+  readonly conflict = input<ConflictState | null>(null);
+  /** Which operation's sentence to render; defaults to the merge copy. */
+  readonly operation = input<ConflictOperation>('merge');
   readonly dismiss = output<void>();
 }

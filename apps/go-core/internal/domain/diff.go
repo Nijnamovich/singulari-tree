@@ -135,6 +135,12 @@ type GitPort interface {
 	// leaves the tree conflicted and returns a result with HasConflict set plus
 	// a typed MERGE_CONFLICT error.
 	Merge(ctx context.Context, repoID RepositoryId, ref string, strategy MergeStrategy, noCommit bool, message string) (*MergeResult, error)
+	// Cherry-pick, revert and read-only revision resolution (ADR-0042). A
+	// conflict leaves the tree conflicted and returns a result with
+	// HasConflict set plus a typed CHERRY_PICK_CONFLICT/REVERT_CONFLICT error.
+	CherryPick(ctx context.Context, repoID RepositoryId, source string, recordOrigin, noCommit bool) (*SequencerResult, error)
+	Revert(ctx context.Context, repoID RepositoryId, source string) (*SequencerResult, error)
+	ResolveRevision(ctx context.Context, repoID RepositoryId, revision string) (*Commit, error)
 	RemoteList(ctx context.Context, repoID RepositoryId) ([]Remote, error)
 	TagList(ctx context.Context, repoID RepositoryId) ([]Tag, error)
 	// TagCreate maps to `git tag [-a -m <message>] [-f] <name> [<target>]`; an

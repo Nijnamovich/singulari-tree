@@ -150,20 +150,25 @@ func (s *Server) RelocateRepository(ctx context.Context, req *singularitreev1.Re
 }
 
 // GetCommits returns a window of commits plus the total reachable count.
+//
+// An optional branch lens (non-empty refs) widens the walk to the union
+// HEAD ∪ refs without checking anything out; in that case in_refs reports, per
+// commit, whether it is reachable from the requested refs.
 func (s *Server) GetCommits(ctx context.Context, req *singularitreev1.GetCommitsRequest) (*singularitreev1.GetCommitsResponse, error) {
 	if s.graphSvc == nil {
 		return nil, status.Error(codes.FailedPrecondition, "graph service not configured")
 	}
 	repoID := domain.RepositoryId(req.GetRepoId())
-	commits, total, err := s.graphSvc.Commits(ctx, repoID, int(req.GetOffset()), int(req.GetLimit()))
+	refs := req.GetRefs()
+	commits, total, err := s.graphSvc.Commits(ctx, repoID, refs, int(req.GetOffset()), int(req.GetLimit()))
 	if err != nil {
 		return nil, appErrorToStatus(ctx, err)
 	}
 	// Lanes are computed in Go (ADR-008) and returned as a parallel array:
 	// lanes[i] belongs to commits[i]. WindowLanes keeps columns continuous with
-	// the full history from HEAD across scroll windows (stateful per-repo lane
+	// the folded history across scroll windows (stateful per-repo, per-lens lane
 	// state), falling back to the pure window-local Lanes when no Git port.
-	lanes, err := s.graphSvc.WindowLanes(ctx, repoID, commits, int(req.GetOffset()))
+	lanes, err := s.graphSvc.WindowLanes(ctx, repoID, refs, commits, int(req.GetOffset()))
 	if err != nil {
 		return nil, appErrorToStatus(ctx, err)
 	}
@@ -177,6 +182,25 @@ func (s *Server) GetCommits(ctx context.Context, req *singularitreev1.GetCommits
 	}
 	for _, l := range lanes {
 		out.Lanes = append(out.Lanes, laneToProto(l))
+	}
+	// in_refs is the branch-lens membership array, parallel to commits: entry i
+	// is true when commits[i] is reachable from the requested refs. For an
+	// un-lensed request it is left empty — shorter than commits is the contract
+	// for that case, so the renderer never pays for a membership walk it did not
+	// ask for.
+	if len(refs) > 0 {
+		oids, err := s.graphSvc.LensOids(ctx, repoID, refs)
+		if err != nil {
+			return nil, appErrorToStatus(ctx, err)
+		}
+		member := make(map[string]struct{}, len(oids))
+		for _, oid := range oids {
+			member[oid] = struct{}{}
+		}
+		out.InRefs = make([]bool, len(commits))
+		for i := range commits {
+			_, out.InRefs[i] = member[commits[i].Oid.Hex]
+		}
 	}
 	return out, nil
 }
@@ -430,6 +454,58 @@ func (s *Server) Merge(ctx context.Context, req *singularitreev1.MergeRequest) (
 		return nil, appErrorToStatus(ctx, err)
 	}
 	return &singularitreev1.MergeResponse{HasConflict: result.HasConflict, Oid: result.Oid.Hex}, nil
+}
+
+// CherryPick applies the requested revision on top of the current branch
+// (ADR-0042). A conflict is surfaced as data: has_conflict is set on the
+// response, the tree is left conflicted (GetStatus reports is_conflicted) and
+// the typed CHERRY_PICK_CONFLICT code is attached to the trailer.
+func (s *Server) CherryPick(ctx context.Context, req *singularitreev1.CherryPickRequest) (*singularitreev1.CherryPickResponse, error) {
+	if s.gitSvc == nil {
+		return nil, status.Error(codes.FailedPrecondition, "git service not configured")
+	}
+	result, err := s.gitSvc.CherryPick(ctx, domain.RepositoryId(req.GetRepoId()), req.GetSource(), req.GetRecordOrigin(), req.GetNoCommit())
+	if err != nil {
+		var appErr domain.AppError
+		if errors.As(err, &appErr) && appErr.Code == domain.ErrCodeCherryPickConflict && result != nil {
+			_ = googlegrpc.SetTrailer(ctx, metadata.Pairs(appErrorTrailerKey, domain.ErrCodeCherryPickConflict))
+			return &singularitreev1.CherryPickResponse{HasConflict: true, Oid: result.Oid.Hex}, nil
+		}
+		return nil, appErrorToStatus(ctx, err)
+	}
+	return &singularitreev1.CherryPickResponse{HasConflict: result.HasConflict, Oid: result.Oid.Hex}, nil
+}
+
+// Revert undoes the requested revision on the current branch (ADR-0042). A
+// conflict is surfaced as data exactly like Merge, with the REVERT_CONFLICT
+// code in the trailer.
+func (s *Server) Revert(ctx context.Context, req *singularitreev1.RevertRequest) (*singularitreev1.RevertResponse, error) {
+	if s.gitSvc == nil {
+		return nil, status.Error(codes.FailedPrecondition, "git service not configured")
+	}
+	result, err := s.gitSvc.Revert(ctx, domain.RepositoryId(req.GetRepoId()), req.GetSource())
+	if err != nil {
+		var appErr domain.AppError
+		if errors.As(err, &appErr) && appErr.Code == domain.ErrCodeRevertConflict && result != nil {
+			_ = googlegrpc.SetTrailer(ctx, metadata.Pairs(appErrorTrailerKey, domain.ErrCodeRevertConflict))
+			return &singularitreev1.RevertResponse{HasConflict: true, Oid: result.Oid.Hex}, nil
+		}
+		return nil, appErrorToStatus(ctx, err)
+	}
+	return &singularitreev1.RevertResponse{HasConflict: result.HasConflict, Oid: result.Oid.Hex}, nil
+}
+
+// ResolveRevision resolves a revision to its commit without mutating anything
+// (ADR-0042), used by the cherry-pick/revert preview.
+func (s *Server) ResolveRevision(ctx context.Context, req *singularitreev1.ResolveRevisionRequest) (*singularitreev1.Commit, error) {
+	if s.gitSvc == nil {
+		return nil, status.Error(codes.FailedPrecondition, "git service not configured")
+	}
+	commit, err := s.gitSvc.ResolveRevision(ctx, domain.RepositoryId(req.GetRepoId()), req.GetRevision())
+	if err != nil {
+		return nil, appErrorToStatus(ctx, err)
+	}
+	return commitToProto(*commit), nil
 }
 
 // CreateTag creates a tag (annotated or lightweight, ADR-028). An empty target

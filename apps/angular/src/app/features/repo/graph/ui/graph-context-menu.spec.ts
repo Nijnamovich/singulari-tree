@@ -19,6 +19,8 @@ interface RenderOptions {
   target?: GraphContextMenuTarget | null;
   canCompare?: boolean;
   busy?: boolean;
+  lensActive?: boolean;
+  currentBranch?: string;
 }
 
 function render(options: RenderOptions = {}) {
@@ -29,6 +31,8 @@ function render(options: RenderOptions = {}) {
   fixture.componentRef.setInput('target', options.target ?? makeTarget());
   fixture.componentRef.setInput('canCompare', options.canCompare ?? false);
   fixture.componentRef.setInput('busy', options.busy ?? false);
+  fixture.componentRef.setInput('lensActive', options.lensActive ?? false);
+  fixture.componentRef.setInput('currentBranch', options.currentBranch ?? '');
   fixture.detectChanges();
   return fixture;
 }
@@ -65,9 +69,35 @@ describe('GraphContextMenu', () => {
     expect(query(fixture, 'ctx-reset-hard')).not.toBeNull();
 
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="ctx-cherry-pick"]')).toBeNull();
-    expect(el.querySelector('[data-testid="ctx-revert"]')).toBeNull();
-    expect(el.textContent ?? '').not.toMatch(/cherry|revert/i);
+    // The real entry is the lens-tier `ctx-lens-cherry-pick`; the un-lensed tier
+    // renders no cherry-pick action at all (ADR-0042).
+    expect(query(fixture, 'ctx-lens-cherry-pick')).toBeNull();
+    expect(el.textContent ?? '').not.toMatch(/cherry|rebase/i);
+  });
+
+  it('renders Revert this commit in the current-branch tier and emits the oid', () => {
+    const oid = 'c0ffee'.repeat(7).slice(0, 40);
+    const fixture = render({ target: makeTarget([], oid) });
+    let emitted: string | undefined;
+    fixture.componentInstance.revert.subscribe((value) => (emitted = value));
+
+    const item = query(fixture, 'ctx-revert');
+    expect(item).not.toBeNull();
+    expect(item?.textContent).toContain('Revert this commit');
+
+    item?.click();
+    expect(emitted).toBe(oid);
+  });
+
+  it('does not emit Revert while busy', () => {
+    const fixture = render({ busy: true });
+    let emitted = 0;
+    fixture.componentInstance.revert.subscribe(() => (emitted += 1));
+
+    expect(query(fixture, 'ctx-revert')?.hasAttribute('disabled')).toBe(true);
+    query(fixture, 'ctx-revert')?.click();
+
+    expect(emitted).toBe(0);
   });
 
   it('emits the full oid for File status and only for a real commit', () => {
@@ -232,15 +262,18 @@ describe('GraphContextMenu', () => {
     fixture.componentInstance.compare.subscribe(() => (emitted += 1));
     fixture.componentInstance.createBranchHere.subscribe(() => (emitted += 1));
     fixture.componentInstance.tagCommit.subscribe(() => (emitted += 1));
+    fixture.componentInstance.revert.subscribe(() => (emitted += 1));
     fixture.componentInstance.reset.subscribe(() => (emitted += 1));
 
     expect(query(fixture, 'ctx-checkout')?.hasAttribute('disabled')).toBe(true);
     expect(query(fixture, 'ctx-create-branch')?.hasAttribute('disabled')).toBe(true);
     expect(query(fixture, 'ctx-tag')?.hasAttribute('disabled')).toBe(true);
+    expect(query(fixture, 'ctx-revert')?.hasAttribute('disabled')).toBe(true);
     query(fixture, 'ctx-checkout')?.click();
     query(fixture, 'ctx-compare')?.click();
     query(fixture, 'ctx-create-branch')?.click();
     query(fixture, 'ctx-tag')?.click();
+    query(fixture, 'ctx-revert')?.click();
     query(fixture, 'ctx-reset-soft')?.click();
 
     expect(emitted).toBe(0);
@@ -317,5 +350,106 @@ describe('GraphContextMenu', () => {
     menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
 
     expect(closed).toBe(1);
+  });
+
+  // -- lens tier (ADR-0042) -------------------------------------------------
+
+  it('renders exactly three entries while a lens is active and no ref mutations', () => {
+    const fixture = render({ lensActive: true, currentBranch: 'main' });
+    const el = fixture.nativeElement as HTMLElement;
+    const items = Array.from(el.querySelectorAll<HTMLElement>('.st-graph-context-menu__item'));
+
+    expect(items).toHaveLength(3);
+    expect(items.map((item) => item.getAttribute('data-testid'))).toEqual([
+      'ctx-lens-cherry-pick',
+      'ctx-copy-sha',
+      'ctx-file-status',
+    ]);
+
+    for (const excluded of [
+      'ctx-checkout',
+      'ctx-compare',
+      'ctx-create-branch',
+      'ctx-tag',
+      'ctx-revert',
+      'ctx-reset-soft',
+      'ctx-reset-mixed',
+      'ctx-reset-hard',
+    ]) {
+      expect(query(fixture, excluded)).toBeNull();
+    }
+    // No reset group/separator leaks into the lens tier either.
+    expect(el.querySelectorAll('.st-graph-context-menu__separator')).toHaveLength(0);
+    expect(el.querySelectorAll('.st-graph-context-menu__group')).toHaveLength(0);
+    // The stale non-lens id is not the real entry, so it must not appear here.
+    expect(query(fixture, 'ctx-cherry-pick')).toBeNull();
+  });
+
+  it('names the current branch as the cherry-pick destination and emits the oid', () => {
+    const oid = 'beef'.repeat(10);
+    const fixture = render({
+      lensActive: true,
+      currentBranch: 'feature/x',
+      target: makeTarget([], oid),
+    });
+    let emitted: string | undefined;
+    fixture.componentInstance.lensCherryPick.subscribe((value) => (emitted = value));
+
+    const item = query(fixture, 'ctx-lens-cherry-pick') as HTMLElement;
+    expect(item.textContent).toContain('Cherry-pick onto');
+    expect(item.textContent).toContain('feature/x');
+
+    item.click();
+
+    expect(emitted).toBe(oid);
+  });
+
+  it('names a detached HEAD as the cherry-pick destination when no branch is current', () => {
+    const fixture = render({ lensActive: true, currentBranch: '' });
+    const item = query(fixture, 'ctx-lens-cherry-pick') as HTMLElement;
+
+    expect(item.textContent).toContain('Cherry-pick onto');
+    expect(item.textContent).toContain('detached HEAD');
+  });
+
+  it('does not emit cherry-pick while busy', () => {
+    const fixture = render({ lensActive: true, busy: true });
+    let emitted = 0;
+    fixture.componentInstance.lensCherryPick.subscribe(() => (emitted += 1));
+
+    expect(query(fixture, 'ctx-lens-cherry-pick')?.hasAttribute('disabled')).toBe(true);
+    query(fixture, 'ctx-lens-cherry-pick')?.click();
+
+    expect(emitted).toBe(0);
+  });
+
+  it('keeps ArrowDown/ArrowUp focus movement inside the lens tier', () => {
+    const fixture = render({ lensActive: true, currentBranch: 'main' });
+    const el = fixture.nativeElement as HTMLElement;
+    const items = Array.from(
+      el.querySelectorAll<HTMLElement>('.st-graph-context-menu__item:not(:disabled)'),
+    );
+    const menu = query(fixture, 'graph-context-menu') as HTMLElement;
+
+    items[0]?.focus();
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.activeElement).toBe(items[1]);
+
+    menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    expect(document.activeElement).toBe(items[0]);
+  });
+
+  it('renders the full entry set (including Reset) with no lens active', () => {
+    const fixture = render({ lensActive: false });
+
+    expect(query(fixture, 'ctx-checkout')).not.toBeNull();
+    expect(query(fixture, 'ctx-compare')).not.toBeNull();
+    expect(query(fixture, 'ctx-create-branch')).not.toBeNull();
+    expect(query(fixture, 'ctx-tag')).not.toBeNull();
+    expect(query(fixture, 'ctx-revert')).not.toBeNull();
+    expect(query(fixture, 'ctx-reset-soft')).not.toBeNull();
+    expect(query(fixture, 'ctx-reset-mixed')).not.toBeNull();
+    expect(query(fixture, 'ctx-reset-hard')).not.toBeNull();
+    expect(query(fixture, 'ctx-lens-cherry-pick')).toBeNull();
   });
 });

@@ -24,8 +24,14 @@ import { WIP_OID } from '../graph.store';
  * tag-this-commit entries (lit up in M3 once the ref RPCs landed, ADR-028),
  * the File status entry and the Reset submenu (soft/mixed/hard). Compare and
  * File status are both navigation entries that emit for the page to select +
- * route (ADR-0030 item 4); neither renders a diff here. Cherry-pick and revert
- * remain out of scope and are never rendered: no dead actions ship.
+ * route (ADR-0030 item 4); neither renders a diff here.
+ *
+ * The menu is tiered on the branch lens (ADR-0042): while a view-only lens is
+ * active it renders EXACTLY three entries — cherry-pick onto the current
+ * branch, Copy SHA and File status — because none of the ref mutations may run
+ * against a ref that was never checked out. With no lens every pre-existing
+ * entry is unchanged, plus the "Revert this commit…" entry (it acts on the
+ * checked-out branch, so it is never offered while lensing).
  *
  * The component performs no RPC and touches no Git: it emits the chosen action
  * and the owning store/page decides what to do. It mounts on `st-popover`, which
@@ -60,6 +66,48 @@ import { WIP_OID } from '../graph.store';
             [style.top.px]="y()"
             (keydown)="onKeydown($event)"
           >
+            @if (lensActive()) {
+              <!--
+                Lens tier (ADR-0042): exactly three entries. Checkout/compare
+                and the ref mutations are hidden because a lens is read-only
+                scoping; the graph cannot silently check out the lensed branch.
+              -->
+              <button
+                type="button"
+                role="menuitem"
+                class="st-graph-context-menu__item"
+                data-testid="ctx-lens-cherry-pick"
+                [disabled]="busy()"
+                (click)="onLensCherryPick(ctx)"
+              >
+                <span i18n>Cherry-pick onto</span>
+                <span class="st-graph-context-menu__hint">{{
+                  currentBranch() || detachedHeadLabel
+                }}</span>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                class="st-graph-context-menu__item"
+                data-testid="ctx-copy-sha"
+                [disabled]="busy()"
+                (click)="copySha.emit(ctx.oid)"
+              >
+                <span i18n>Copy SHA</span>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                class="st-graph-context-menu__item"
+                data-testid="ctx-file-status"
+                [disabled]="!canFileStatus() || busy()"
+                (click)="onFileStatus(ctx)"
+              >
+                <span i18n>File status</span>
+              </button>
+            } @else {
             <button
               type="button"
               role="menuitem"
@@ -108,7 +156,7 @@ import { WIP_OID } from '../graph.store';
               [disabled]="busy()"
               (click)="copySha.emit(ctx.oid)"
             >
-              Copy SHA
+              <span i18n>Copy SHA</span>
             </button>
 
             <div class="st-graph-context-menu__separator" role="separator"></div>
@@ -132,6 +180,20 @@ import { WIP_OID } from '../graph.store';
               (click)="onTagCommit(ctx)"
             >
               Tag this commit…
+            </button>
+
+            <!-- Revert runs on the checked-out branch, so it belongs to this
+                 (non-lens) tier only. No "Rebase children" entry: deferred. -->
+            <button
+              type="button"
+              role="menuitem"
+              class="st-graph-context-menu__item"
+              data-testid="ctx-revert"
+              [disabled]="busy()"
+              (click)="onRevert(ctx)"
+              i18n
+            >
+              Revert this commit…
             </button>
 
             <div class="st-graph-context-menu__separator" role="separator"></div>
@@ -167,6 +229,7 @@ import { WIP_OID } from '../graph.store';
             >
               Hard — discard changes…
             </button>
+            }
           </div>
         </st-popover>
       </div>
@@ -287,6 +350,10 @@ export class GraphContextMenu {
   readonly canCompare = input(false);
   /** True while an owning store operation is in flight (disables every entry). */
   readonly busy = input(false);
+  /** True while the graph renders a view-only branch lens (ADR-0042). */
+  readonly lensActive = input(false);
+  /** Name of the current local branch, shown as the cherry-pick destination. */
+  readonly currentBranch = input('');
 
   readonly checkout = output<CheckoutTarget>();
   /** Emitted when the user picks "Compare with selected"; the page selects the commit and routes (ADR-0030). */
@@ -298,8 +365,18 @@ export class GraphContextMenu {
   readonly createBranchHere = output<string>();
   /** Create a tag at the menu commit; emits the full oid (ADR-028). */
   readonly tagCommit = output<string>();
+  /** Revert the menu commit on the current branch; emits the full oid (ADR-0042). */
+  readonly revert = output<string>();
   readonly reset = output<ResetModeName>();
+  /** Cherry-pick the menu commit onto the current branch; emits the full oid. */
+  readonly lensCherryPick = output<string>();
   readonly closed = output<void>();
+
+  /**
+   * Destination hint when HEAD is detached: there is no branch name to show, so
+   * the label must still read as a sentence rather than ending in a blank.
+   */
+  readonly detachedHeadLabel = $localize`detached HEAD`;
 
   /** Named modes exposed to the template so it never hardcodes strings. */
   readonly SOFT: ResetModeName = 'SOFT';
@@ -354,6 +431,18 @@ export class GraphContextMenu {
   onTagCommit(target: GraphContextMenuTarget): void {
     if (this.busy()) return;
     this.tagCommit.emit(target.oid);
+  }
+
+  /** Revert the menu commit on the checked-out branch (non-lens tier only). */
+  onRevert(target: GraphContextMenuTarget): void {
+    if (this.busy()) return;
+    this.revert.emit(target.oid);
+  }
+
+  /** Lens tier: emit the commit to cherry-pick onto the current branch. */
+  onLensCherryPick(target: GraphContextMenuTarget): void {
+    if (this.busy()) return;
+    this.lensCherryPick.emit(target.oid);
   }
 
   /**

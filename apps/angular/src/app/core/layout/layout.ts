@@ -13,6 +13,7 @@ import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { LiveRegionService, type RepoCardView } from '@singularitree/ui-kit';
 import type { Repository, Stash } from '@contracts/domain';
 import type { GitFlowConfig } from '@contracts/gitcore';
+import { BranchLensStore } from '@core/services/branch-lens.store';
 import { CommitFocusService } from '@core/services/commit-focus.service';
 import {
   IpcBridge,
@@ -30,8 +31,14 @@ import { FetchDialog } from '@features/remote/ui/fetch-dialog/fetch-dialog';
 import { PullDialog } from '@features/remote/ui/pull-dialog/pull-dialog';
 import { PushDialog } from '@features/remote/ui/push-dialog/push-dialog';
 import { BranchCreateDialog } from '@shared/ui/ref-dialogs/branch-create-dialog';
+import { CherryPickDialog } from '@shared/ui/ref-dialogs/cherry-pick-dialog';
 import { MergeDialog } from '@shared/ui/ref-dialogs/merge-dialog';
-import type { BranchCreateValue, MergeValue, TagCreateValue } from '@shared/ui/ref-dialogs/ref-dialog.models';
+import type {
+  BranchCreateValue,
+  CherryPickValue,
+  MergeValue,
+  TagCreateValue,
+} from '@shared/ui/ref-dialogs/ref-dialog.models';
 import { RefDeleteConfirmDialog } from '@shared/ui/ref-dialogs/ref-delete-confirm-dialog';
 import { RefRenameDialog } from '@shared/ui/ref-dialogs/ref-rename-dialog';
 import { StashDropConfirmDialog } from '@shared/ui/ref-dialogs/stash-drop-confirm-dialog';
@@ -89,6 +96,7 @@ interface CheckoutPrompt {
     RefDeleteConfirmDialog,
     TagCreateDialog,
     MergeDialog,
+    CherryPickDialog,
     StashPushDialog,
     StashDropConfirmDialog,
     GitFlowDialog,
@@ -100,6 +108,8 @@ interface CheckoutPrompt {
 })
 export class LayoutComponent implements OnInit {
   readonly repoState = inject(RepoState);
+  /** Root view-only branch lens (ADR-0042), owned by the rail + graph. */
+  readonly lens = inject(BranchLensStore);
   readonly remoteOps = inject(RemoteOpsStore);
   readonly workspaces = inject(WorkspacesStore);
   private readonly commitFocus = inject(CommitFocusService);
@@ -527,15 +537,33 @@ export class LayoutComponent implements OnInit {
     this.cloneDialog.set(null);
   }
 
+  /**
+   * Single-click lens request from the rail. The current local branch is never
+   * lensed (its history already is the HEAD walk), so clicking it clears the
+   * lens; every other ref toggles. The rail just emits and stays controlled.
+   */
+  onLensToggled(payload: { ref: string; kind: 'local' | 'remote' }): void {
+    if (payload.kind === 'local' && payload.ref === this.repoState.currentBranch()) {
+      this.lens.clear();
+      return;
+    }
+    this.lens.toggle(payload.ref, payload.kind);
+  }
+
   /** Open the pre-checkout confirmation for a local branch click. */
   onBranchSelected(name: string): void {
-    // Clicking the already-current local branch is a no-op.
+    // Checkout is the terminal "no lens" state: drop any view-only scope before
+    // (even when the click targets the already-current branch).
+    this.lens.clear();
+    // Clicking the already-current local branch is a no-op beyond that.
     if (name === this.repoState.currentBranch()) return;
     this.checkoutPrompt.set({ name, isRemote: false, mode: 'confirm' });
   }
 
   /** Open the pre-checkout confirmation for a remote-tracking branch click. */
   onRemoteBranchSelected(name: string): void {
+    // A checkout always lands lens-free.
+    this.lens.clear();
     this.checkoutPrompt.set({ name, isRemote: true, mode: 'confirm' });
   }
 
@@ -637,6 +665,31 @@ export class LayoutComponent implements OnInit {
 
   onMergeCancelled(): void {
     this.mergeDialog.set(null);
+    this.repoState.clearRefOpError();
+  }
+
+  // -- cherry-pick (ADR-0042) ----------------------------------------------
+
+  /**
+   * Cherry-pick the dialog's source onto the current branch. The dialog stays
+   * open when the pick conflicts (`false`), so its warn row and the refreshed
+   * working tree are visible next to the source it applies to.
+   */
+  onCherryPickSubmitted(value: CherryPickValue): void {
+    void this.repoState
+      .cherryPick(value.source, value.recordOrigin, value.noCommit)
+      .then((ok) => {
+        if (ok) this.repoState.closeCherryPick();
+      });
+  }
+
+  /** Preview the settled source revision (the dialog debounces the typing). */
+  onCherrySourceChange(source: string): void {
+    void this.repoState.resolveCherryPickSource(source);
+  }
+
+  onCherryPickCancelled(): void {
+    this.repoState.closeCherryPick();
     this.repoState.clearRefOpError();
   }
 

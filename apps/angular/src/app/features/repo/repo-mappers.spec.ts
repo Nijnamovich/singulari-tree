@@ -40,6 +40,7 @@ const RESPONSE: GetCommitsResponse = {
     { index: 0, color: 3, continues: true },
     { index: 1, color: 1, continues: false },
   ],
+  inRefs: [],
 };
 
 describe('mapCommitRows', () => {
@@ -73,11 +74,16 @@ describe('mapCommitRows', () => {
   });
 
   it('returns an empty array for an empty response', () => {
-    expect(mapCommitRows({ commits: [], total: 0, lanes: [] })).toEqual([]);
+    expect(mapCommitRows({ commits: [], total: 0, lanes: [], inRefs: [] })).toEqual([]);
   });
 
   it('defaults a neutral lane when the lanes array is missing or short', () => {
-    const missing = mapCommitRows({ commits: [COMMIT_A, COMMIT_B], total: 2 } as GetCommitsResponse);
+    const missing = mapCommitRows({
+      commits: [COMMIT_A, COMMIT_B],
+      total: 2,
+      lanes: [],
+      inRefs: [],
+    } as GetCommitsResponse);
     expect(missing.map((row) => row.lane)).toEqual([
       { index: 0, color: 0, continues: false },
       { index: 0, color: 0, continues: false },
@@ -89,7 +95,12 @@ describe('mapCommitRows', () => {
   });
 
   it('normalizes page lanes to one entry per commit', () => {
-    const lanes = mapPageLanes({ commits: [COMMIT_A, COMMIT_B], total: 2, lanes: [] });
+    const lanes = mapPageLanes({
+      commits: [COMMIT_A, COMMIT_B],
+      total: 2,
+      lanes: [],
+      inRefs: [],
+    });
     expect(lanes).toEqual([
       { index: 0, color: 0, continues: false },
       { index: 0, color: 0, continues: false },

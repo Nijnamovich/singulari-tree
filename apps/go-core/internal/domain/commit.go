@@ -74,17 +74,29 @@ type Commit struct {
 }
 
 // CommitPort is the read port for commits.
+//
+// List returns one window of commits in topological order (newest first) plus
+// the total reachable count. With empty refs it walks history from HEAD, which
+// is the ordinary graph read. With non-empty refs it walks the union HEAD ∪ refs
+// (a branch lens) without checking any ref out, and the total is the union's
+// reachable count.
 type CommitPort interface {
 	Get(ctx context.Context, repoID RepositoryId, oid Oid) (*Commit, error)
-	List(ctx context.Context, repoID RepositoryId, offset, limit int) ([]Commit, int, error)
+	List(ctx context.Context, repoID RepositoryId, refs []string, offset, limit int) ([]Commit, int, error)
 }
 
 // CommitLister is the narrow read port GraphService needs to walk history from
-// HEAD: a windowed commit listing plus the total reachable count. It is a
-// subset of CommitPort (and therefore of GitPort); services depend on the
+// HEAD or, when refs is non-empty, the union HEAD ∪ refs: a windowed commit
+// listing plus the total reachable count. It is a subset of CommitPort (and
+// therefore of GitPort) plus the lens membership read; services depend on the
 // smallest port that satisfies them.
 type CommitLister interface {
-	List(ctx context.Context, repoID RepositoryId, offset, limit int) ([]Commit, int, error)
+	List(ctx context.Context, repoID RepositoryId, refs []string, offset, limit int) ([]Commit, int, error)
+	// LensOids returns the oids reachable from refs, i.e. the branch-lens
+	// membership set used to mark which listed commits belong to the lens. It is
+	// a plain reachability read and does not imply a checkout. Empty refs yield
+	// an empty result.
+	LensOids(ctx context.Context, repoID RepositoryId, refs []string) ([]string, error)
 }
 
 // Errors

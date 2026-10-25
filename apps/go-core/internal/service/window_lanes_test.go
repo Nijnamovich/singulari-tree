@@ -40,7 +40,7 @@ func newFakeCommitLister(all []domain.Commit) *fakeCommitLister {
 	return &fakeCommitLister{all: all}
 }
 
-func (f *fakeCommitLister) List(_ context.Context, _ domain.RepositoryId, offset, limit int) ([]domain.Commit, int, error) {
+func (f *fakeCommitLister) List(_ context.Context, _ domain.RepositoryId, _ []string, offset, limit int) ([]domain.Commit, int, error) {
 	f.mu.Lock()
 	f.calls++
 	total := len(f.all)
@@ -59,6 +59,12 @@ func (f *fakeCommitLister) List(_ context.Context, _ domain.RepositoryId, offset
 	out := make([]domain.Commit, end-offset)
 	copy(out, f.all[offset:end])
 	return out, total, nil
+}
+
+// LensOids satisfies domain.CommitLister. The fixture lister models the HEAD
+// walk only, so a lens has no membership; tests that need a lens use lensLister.
+func (f *fakeCommitLister) LensOids(context.Context, domain.RepositoryId, []string) ([]string, error) {
+	return []string{}, nil
 }
 
 func (f *fakeCommitLister) callCount() int {
@@ -84,7 +90,7 @@ func TestWindowLanesContinuityAcrossWindows(t *testing.T) {
 	all := branchMergeCommits()
 
 	oneShot := NewGraphService(newFakeCommitLister(all), nil)
-	want, err := oneShot.WindowLanes(ctx, repo, all, 0)
+	want, err := oneShot.WindowLanes(ctx, repo, nil, all, 0)
 	if err != nil {
 		t.Fatalf("WindowLanes(one-shot): %v", err)
 	}
@@ -102,7 +108,7 @@ func TestWindowLanesContinuityAcrossWindows(t *testing.T) {
 				if end > len(all) {
 					end = len(all)
 				}
-				lanes, err := svc.WindowLanes(ctx, repo, all[off:end], off)
+				lanes, err := svc.WindowLanes(ctx, repo, nil, all[off:end], off)
 				if err != nil {
 					t.Fatalf("WindowLanes(offset=%d): %v", off, err)
 				}
@@ -125,17 +131,17 @@ func TestWindowLanesOutOfOrderWindow(t *testing.T) {
 	const k = 2
 
 	want := NewGraphService(newFakeCommitLister(all), nil)
-	full, err := want.WindowLanes(ctx, repo, all, 0)
+	full, err := want.WindowLanes(ctx, repo, nil, all, 0)
 	if err != nil {
 		t.Fatalf("WindowLanes(full): %v", err)
 	}
 
 	svc := NewGraphService(newFakeCommitLister(all), nil)
-	second, err := svc.WindowLanes(ctx, repo, all[k:], k)
+	second, err := svc.WindowLanes(ctx, repo, nil, all[k:], k)
 	if err != nil {
 		t.Fatalf("WindowLanes(second): %v", err)
 	}
-	first, err := svc.WindowLanes(ctx, repo, all[0:k], 0)
+	first, err := svc.WindowLanes(ctx, repo, nil, all[0:k], 0)
 	if err != nil {
 		t.Fatalf("WindowLanes(first): %v", err)
 	}
@@ -154,7 +160,7 @@ func TestWindowLanesCatchUpSkipsPrefix(t *testing.T) {
 	all := branchMergeCommits()
 
 	want := NewGraphService(newFakeCommitLister(all), nil)
-	full, err := want.WindowLanes(ctx, repo, all, 0)
+	full, err := want.WindowLanes(ctx, repo, nil, all, 0)
 	if err != nil {
 		t.Fatalf("WindowLanes(full): %v", err)
 	}
@@ -162,10 +168,10 @@ func TestWindowLanesCatchUpSkipsPrefix(t *testing.T) {
 	svc := NewGraphService(newFakeCommitLister(all), nil)
 	// Anchor at offset 0 with a single commit, then jump to offset 3: the two
 	// commits in between must be fetched and folded as catch-up.
-	if _, err := svc.WindowLanes(ctx, repo, all[0:1], 0); err != nil {
+	if _, err := svc.WindowLanes(ctx, repo, nil, all[0:1], 0); err != nil {
 		t.Fatalf("WindowLanes(anchor): %v", err)
 	}
-	tail, err := svc.WindowLanes(ctx, repo, all[3:], 3)
+	tail, err := svc.WindowLanes(ctx, repo, nil, all[3:], 3)
 	if err != nil {
 		t.Fatalf("WindowLanes(tail): %v", err)
 	}
@@ -182,14 +188,14 @@ func TestWindowLanesInvalidateRecomputes(t *testing.T) {
 	all := branchMergeCommits()
 
 	svc := NewGraphService(newFakeCommitLister(all), nil)
-	before, err := svc.WindowLanes(ctx, repo, all, 0)
+	before, err := svc.WindowLanes(ctx, repo, nil, all, 0)
 	if err != nil {
 		t.Fatalf("WindowLanes(before): %v", err)
 	}
 
 	svc.Invalidate(repo)
 
-	after, err := svc.WindowLanes(ctx, repo, all, 0)
+	after, err := svc.WindowLanes(ctx, repo, nil, all, 0)
 	if err != nil {
 		t.Fatalf("WindowLanes(after): %v", err)
 	}
@@ -205,7 +211,7 @@ func TestWindowLanesFallsBackWithoutGitPort(t *testing.T) {
 	all := branchMergeCommits()
 	svc := NewGraphService(nil, nil)
 
-	got, err := svc.WindowLanes(ctx, domain.RepositoryId("repo"), all, 2)
+	got, err := svc.WindowLanes(ctx, domain.RepositoryId("repo"), nil, all, 2)
 	if err != nil {
 		t.Fatalf("WindowLanes: %v", err)
 	}
@@ -234,7 +240,7 @@ func TestWindowLanesConcurrentSafe(t *testing.T) {
 				if end > len(all) {
 					end = len(all)
 				}
-				if _, err := svc.WindowLanes(ctx, repo, all[off:end], off); err != nil {
+				if _, err := svc.WindowLanes(ctx, repo, nil, all[off:end], off); err != nil {
 					t.Errorf("WindowLanes(offset=%d): %v", off, err)
 					return
 				}

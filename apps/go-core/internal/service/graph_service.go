@@ -3,6 +3,8 @@ package service
 import (
 	"container/heap"
 	"context"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/SingulariTree/go-core/internal/domain"
@@ -16,19 +18,24 @@ const lanePaletteSize = 8
 // GraphService owns commit graph and lanes (service-design.md §1.3).
 //
 // It keeps stateful per-repo lane layout (see WindowLanes) behind mu so a
-// scroll window's lanes match the full-history layout from HEAD. gitPort is the
-// narrow CommitLister: the service never needs the rest of the Git port.
+// scroll window's lanes match the full-history layout from HEAD. Lane state and
+// the lens oid sets are keyed by repository AND canonical lens ref set, so a
+// branch lens folds its own columns instead of shifting the HEAD layout. gitPort
+// is the narrow CommitLister: the service never needs the rest of the Git port.
 type GraphService struct {
 	gitPort   domain.CommitLister
 	cachePort domain.CachePort
 
 	mu     sync.Mutex
-	states map[domain.RepositoryId]*repoLaneState
+	states map[string]*repoLaneState
+	lenses map[string][]string
 }
 
-// repoLaneState is the resumable lane layout for one repository, folding
-// history from HEAD in topological order. next is the number of commits already
-// folded from the tip; lanes[i] is the lane of the commit at history position i.
+// repoLaneState is the resumable lane layout for one repository and one lens ref
+// set, folding history from the walk's tip in topological order. next is the
+// number of commits already folded from the tip; tip is that walk's first oid
+// (HEAD for the un-lensed walk); lanes[i] is the lane of the commit at history
+// position i.
 type repoLaneState struct {
 	tip    string
 	next   int
@@ -41,8 +48,41 @@ func NewGraphService(gitPort domain.CommitLister, cachePort domain.CachePort) *G
 	return &GraphService{
 		gitPort:   gitPort,
 		cachePort: cachePort,
-		states:    make(map[domain.RepositoryId]*repoLaneState),
+		states:    make(map[string]*repoLaneState),
+		lenses:    make(map[string][]string),
 	}
+}
+
+// refSetKey canonicalizes a lens ref set so ref order never mints a second
+// state: trim, drop empties, dedupe, sort, join with NUL. The un-lensed walk
+// (no refs) is the empty key. NUL cannot appear in a git ref name, so two
+// distinct sets can never produce the same key.
+func refSetKey(refs []string) string {
+	if len(refs) == 0 {
+		return ""
+	}
+	seen := make(map[string]struct{}, len(refs))
+	keys := make([]string, 0, len(refs))
+	for _, raw := range refs {
+		ref := strings.TrimSpace(raw)
+		if ref == "" {
+			continue
+		}
+		if _, dup := seen[ref]; dup {
+			continue
+		}
+		seen[ref] = struct{}{}
+		keys = append(keys, ref)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, "\x00")
+}
+
+// repoStateKey namespaces one cached state by repository and canonical lens ref
+// set. The NUL separator cannot occur in a repo id or a ref, so keys never
+// collide and every state of a repo can be swept by prefix.
+func repoStateKey(repoID domain.RepositoryId, refSet string) string {
+	return string(repoID) + "\x00" + refSet
 }
 
 // invalidationGeneration is an optional capability a domain.CachePort may
@@ -58,8 +98,20 @@ type invalidationGeneration interface {
 }
 
 // Commits returns windowed commits (200+100 pattern, handled by Angular GraphStore).
-func (s *GraphService) Commits(ctx context.Context, repoID domain.RepositoryId, offset, limit int) ([]domain.Commit, int, error) {
-	if s.cachePort != nil {
+//
+// refs is the opt-in branch lens: empty refs is today's HEAD walk, unchanged in
+// every observable way (same window, same total, same cache reads/writes).
+// Non-empty refs walks the union HEAD ∪ refs and returns that union's total.
+//
+// A lensed window bypasses the commit cache on BOTH sides. The L1 key is
+// (repo, offset) with no ref dimension and the persisted L2 reader is ordered by
+// commit date rather than topology, so serving or storing a lensed window would
+// cross-serve different lens states from the same slot and could corrupt the
+// date-ordered snapshot that the un-lensed graph reads depend on. The port is
+// still called, so an empty cache never becomes a correctness dependency.
+func (s *GraphService) Commits(ctx context.Context, repoID domain.RepositoryId, refs []string, offset, limit int) ([]domain.Commit, int, error) {
+	lensed := len(refs) > 0
+	if !lensed && s.cachePort != nil {
 		if commits, total, ok := s.cachePort.GetCommits(ctx, repoID, offset, limit); ok {
 			return commits, total, nil
 		}
@@ -74,9 +126,13 @@ func (s *GraphService) Commits(ctx context.Context, repoID domain.RepositoryId, 
 	if hasGen {
 		genBefore = gen.Generation()
 	}
-	commits, total, err := s.gitPort.List(ctx, repoID, offset, limit)
+	commits, total, err := s.gitPort.List(ctx, repoID, refs, offset, limit)
 	if err != nil {
 		return nil, 0, err
+	}
+	// A lensed window is never cached: see the cache-bypass note above.
+	if lensed {
+		return commits, total, nil
 	}
 	// Write-through to the persistent cache is best-effort: a failed write must
 	// never turn a successful read into an error. It is skipped when an
@@ -169,21 +225,29 @@ func (s *GraphService) Lanes(_ context.Context, _ domain.RepositoryId, commits [
 const windowCatchUpChunk = 1000
 
 // WindowLanes lays out one window of commits while keeping lane columns
-// continuous with the full history from HEAD. Unlike the pure, window-local
-// Lanes it folds commits from the tip in order and remembers the slot state per
-// repository, so the same commit always lands in the same column no matter
-// which scroll window requested it (no per-window re-layout seams).
+// continuous with the full history it walks. Unlike the pure, window-local
+// Lanes it folds commits from the walk's tip in order and remembers the slot
+// state per (repository, lens ref set), so the same commit always lands in the
+// same column no matter which scroll window requested it (no per-window
+// re-layout seams).
 //
-// offset is the commit's index in the topological history from HEAD and commits
-// must be the contiguous window starting at offset. The returned slice is a
-// fresh copy and never aliases internal state.
+// refs selects the walk: empty refs folds history from HEAD (the ordinary
+// graph), non-empty folds the union HEAD ∪ refs and keeps that layout under its
+// own key. Keying by the canonical ref set is what prevents column shifts when a
+// lens is toggled: the HEAD layout is never reused for a lensed walk (nor the
+// reverse), so each walk resumes only its own fold. Both the anchor tip read and
+// every catch-up chunk use the same refs the window was requested with.
+//
+// offset is the commit's index in the topological walk and commits must be the
+// contiguous window starting at offset. The returned slice is a fresh copy and
+// never aliases internal state.
 //
 // When the Git port is unavailable, or history cannot be fetched, it falls back
 // to the pure Lanes for the given window. In the stateful path a commit is
 // considered to continue whenever it has at least one parent: the full history
-// from HEAD is folded, so a parent is always eventually shown and its lane is
-// reserved unconditionally.
-func (s *GraphService) WindowLanes(ctx context.Context, repoID domain.RepositoryId, commits []domain.Commit, offset int) ([]domain.Lane, error) {
+// is folded, so a parent is always eventually shown and its lane is reserved
+// unconditionally.
+func (s *GraphService) WindowLanes(ctx context.Context, repoID domain.RepositoryId, refs []string, commits []domain.Commit, offset int) ([]domain.Lane, error) {
 	if s.gitPort == nil {
 		return s.Lanes(ctx, repoID, commits)
 	}
@@ -191,24 +255,27 @@ func (s *GraphService) WindowLanes(ctx context.Context, repoID domain.Repository
 		return []domain.Lane{}, nil
 	}
 
+	key := repoStateKey(repoID, refSetKey(refs))
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	st := s.states[repoID]
+	st := s.states[key]
 
-	// (Re)anchor the layout to the current HEAD so a moved tip (external commit,
-	// rebase) invalidates stale columns. This costs one tiny List(0,1) per call,
-	// which buys detection of HEAD moves that no watcher event reported (the
-	// fsnotify adapter is still a stub) and of any missed invalidation; offset 0
-	// always re-anchors (a reload must not resume stale state).
-	tipCommits, _, err := s.gitPort.List(ctx, repoID, 0, 1)
+	// (Re)anchor the layout to the walk's current tip so a moved tip (external
+	// commit, rebase, lens ref update) invalidates stale columns. This costs one
+	// tiny List(0,1) per call, which buys detection of moves that no watcher
+	// event reported (the fsnotify adapter is still a stub) and of any missed
+	// invalidation; offset 0 always re-anchors (a reload must not resume stale
+	// state).
+	tipCommits, _, err := s.gitPort.List(ctx, repoID, refs, 0, 1)
 	if err != nil || len(tipCommits) == 0 {
 		return s.Lanes(ctx, repoID, commits)
 	}
 	tip := tipCommits[0].Oid.Hex
 	if st == nil || offset == 0 || st.tip != tip {
 		st = &repoLaneState{tip: tip, folder: newLaneFolder(alwaysPresent)}
-		s.states[repoID] = st
+		s.states[key] = st
 	}
 
 	// Fold any history between the last folded commit and this window.
@@ -217,7 +284,7 @@ func (s *GraphService) WindowLanes(ctx context.Context, repoID domain.Repository
 		if chunk > windowCatchUpChunk {
 			chunk = windowCatchUpChunk
 		}
-		prefix, _, err := s.gitPort.List(ctx, repoID, st.next, chunk)
+		prefix, _, err := s.gitPort.List(ctx, repoID, refs, st.next, chunk)
 		if err != nil || len(prefix) == 0 {
 			return s.Lanes(ctx, repoID, commits)
 		}
@@ -247,12 +314,58 @@ func (s *GraphService) WindowLanes(ctx context.Context, repoID domain.Repository
 	return s.Lanes(ctx, repoID, commits)
 }
 
-// Invalidate drops any remembered lane layout for a repository, so the next
-// WindowLanes call re-folds history from HEAD (e.g. after a HEAD move).
+// LensOids returns the oids reachable from the requested lens refs, used to
+// mark GetCommitsResponse.in_refs membership. Results are cached per
+// (repoID, canonical ref set) alongside the lane state, so the fold and the
+// membership array always describe the same ref set and a scroll does not
+// re-walk rev-list for every window. Empty refs are the un-lensed case, which
+// has no membership to report: an empty result is returned without touching the
+// Git port. The cache holds no Git objects, only oid strings.
+func (s *GraphService) LensOids(ctx context.Context, repoID domain.RepositoryId, refs []string) ([]string, error) {
+	refSet := refSetKey(refs)
+	if refSet == "" {
+		return []string{}, nil
+	}
+	key := repoStateKey(repoID, refSet)
+
+	// Hold the lock across the fetch (as WindowLanes does) so an Invalidate
+	// racing this read cannot be followed by a stale re-cache.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if oids, ok := s.lenses[key]; ok {
+		return append([]string{}, oids...), nil
+	}
+	if s.gitPort == nil {
+		return []string{}, nil
+	}
+	oids, err := s.gitPort.LensOids(ctx, repoID, refs)
+	if err != nil {
+		return nil, err
+	}
+	stored := append([]string{}, oids...)
+	s.lenses[key] = stored
+	return append([]string{}, stored...), nil
+}
+
+// Invalidate drops every remembered lane layout and lens oid set for a
+// repository — every lens ref set, not just HEAD — so the next WindowLanes call
+// re-folds history and columns cannot shift when a lens is toggled or a tip
+// moves.
 func (s *GraphService) Invalidate(repoID domain.RepositoryId) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.states, repoID)
+	prefix := string(repoID) + "\x00"
+	for k := range s.states {
+		if strings.HasPrefix(k, prefix) {
+			delete(s.states, k)
+		}
+	}
+	for k := range s.lenses {
+		if strings.HasPrefix(k, prefix) {
+			delete(s.lenses, k)
+		}
+	}
 }
 
 // presentFunc reports whether an oid belongs to the history being laid out.

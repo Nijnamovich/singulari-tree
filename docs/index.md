@@ -4,13 +4,13 @@
 # SingulariTree — Documentation index
 
 <!-- BEGIN GENERATED: index -->
-<!-- snapshot: 2026-10-22 -->
+<!-- snapshot: 2026-10-25 -->
 ## Generated index
 
 ### Overview
 
-- Markdown files: 48
-- Context docs: 7 | Notes: 6 | Hubs: 2 | adrs: 28 | templates: 0 | protocols: 3
+- Markdown files: 49
+- Context docs: 7 | Notes: 6 | Hubs: 2 | adrs: 29 | templates: 0 | protocols: 3
 
 ### Tree
 
@@ -40,6 +40,7 @@
   - adr-0039-linux-release-and-distribution.md — adr, id: `adr-0039-linux-release-and-distribution`
   - adr-0040-per-repo-session-graph-selection-lock.md — adr, id: `adr-0040-per-repo-session-graph-selection-lock`
   - adr-0041-forced-dependency-floors-and-electron-42.md — adr, id: `adr-0041-forced-dependency-floors-and-electron-42`
+  - adr-0042-cherry-pick-and-branch-lens.md — adr, id: `adr-0042-cherry-pick-and-branch-lens`
   - adr-024-multi-repo-workspaces.md — adr, id: `adr-024-multi-repo-workspaces`
   - adr-025-deep-links-and-clipboard-clone.md — adr, id: `adr-025-deep-links-and-clipboard-clone`
   - adr-026-cross-repo-commit-search.md — adr, id: `adr-026-cross-repo-commit-search`

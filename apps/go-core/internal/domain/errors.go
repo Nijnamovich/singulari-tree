@@ -47,15 +47,20 @@ const (
 	ErrCodeDiscardFailed     = "DISCARD_FAILED"
 	ErrCodeMergeConflict     = "MERGE_CONFLICT"
 	ErrCodeMergeFailed       = "MERGE_FAILED"
-	ErrCodeTagExists         = "TAG_EXISTS"
-	ErrCodeTagNotFound       = "TAG_NOT_FOUND"
-	ErrCodeGitFlowFailed     = "GIT_FLOW_FAILED"
-	ErrCodeFetchFailed       = "FETCH_FAILED"
-	ErrCodePushFailed        = "PUSH_FAILED"
-	ErrCodePullFailed        = "PULL_FAILED"
-	ErrCodeDiffFailed        = "DIFF_FAILED"
-	ErrCodeWatchFailed       = "WATCH_FAILED"
-	ErrCodeUnauthenticated   = "UNAUTHENTICATED"
+	// Cherry-pick / revert (ADR-0042).
+	ErrCodeCherryPickConflict = "CHERRY_PICK_CONFLICT"
+	ErrCodeCherryPickFailed   = "CHERRY_PICK_FAILED"
+	ErrCodeRevertConflict     = "REVERT_CONFLICT"
+	ErrCodeRevertFailed       = "REVERT_FAILED"
+	ErrCodeTagExists          = "TAG_EXISTS"
+	ErrCodeTagNotFound        = "TAG_NOT_FOUND"
+	ErrCodeGitFlowFailed      = "GIT_FLOW_FAILED"
+	ErrCodeFetchFailed        = "FETCH_FAILED"
+	ErrCodePushFailed         = "PUSH_FAILED"
+	ErrCodePullFailed         = "PULL_FAILED"
+	ErrCodeDiffFailed         = "DIFF_FAILED"
+	ErrCodeWatchFailed        = "WATCH_FAILED"
+	ErrCodeUnauthenticated    = "UNAUTHENTICATED"
 	// ErrCodeNotImplemented marks Git read-path operations that are scheduled for
 	// later phases (Phase 1/2). Returning it explicitly is preferable to faking
 	// success. See docs/context/git-client/roadmap-mvp.md.
@@ -87,6 +92,9 @@ const (
 var (
 	ErrMergeConflict = AppError{Code: ErrCodeMergeConflict, Message: "merge conflict"}
 	ErrMergeFailed   = AppError{Code: ErrCodeMergeFailed, Message: "merge failed"}
-	ErrTagExists     = AppError{Code: ErrCodeTagExists, Message: "tag already exists"}
-	ErrTagNotFound   = AppError{Code: ErrCodeTagNotFound, Message: "tag not found"}
+	// A conflict still mutated the working tree, exactly like ErrMergeConflict.
+	ErrCherryPickConflict = AppError{Code: ErrCodeCherryPickConflict, Message: "cherry-pick conflict"}
+	ErrRevertConflict     = AppError{Code: ErrCodeRevertConflict, Message: "revert conflict"}
+	ErrTagExists          = AppError{Code: ErrCodeTagExists, Message: "tag already exists"}
+	ErrTagNotFound        = AppError{Code: ErrCodeTagNotFound, Message: "tag not found"}
 )

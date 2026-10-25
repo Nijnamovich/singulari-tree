@@ -42,5 +42,15 @@ export interface MergeValue {
   readonly message: string;
 }
 
+/** Submitted payload of the cherry-pick dialog (ADR-0042). */
+export interface CherryPickValue {
+  /** Bare revision: sha, short sha, branch, remote ref, tag or rev expression. */
+  readonly source: string;
+  /** `-x`: append the source commit reference to the new message. */
+  readonly recordOrigin: boolean;
+  /** `--no-commit`: leave the change staged instead of committing it. */
+  readonly noCommit: boolean;
+}
+
 /** Shared error shape accepted by every ref dialog. */
 export type RefDialogError = AppError | null;

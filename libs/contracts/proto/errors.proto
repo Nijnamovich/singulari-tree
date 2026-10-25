@@ -59,4 +59,11 @@ enum ErrorCode {
   // tracked by another repository. Next free numbers after 32.
   REPO_PATH_MISSING = 33;
   REPO_PATH_IN_USE = 34;
+  // Additive: cherry-pick / revert (ADR-0042), next free numbers after 34.
+  // CONFLICT -> FailedPrecondition (the tree is left conflicted, as MERGE_CONFLICT);
+  // FAILED -> Aborted (the operation did not change the tree).
+  CHERRY_PICK_CONFLICT = 35;
+  CHERRY_PICK_FAILED = 36;
+  REVERT_CONFLICT = 37;
+  REVERT_FAILED = 38;
 }

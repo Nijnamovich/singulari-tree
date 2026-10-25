@@ -1,6 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import type { Commit, CommitStats, Lane, Repository } from '@contracts/domain';
 import type { GetCommitsRequest, GetCommitsResponse, ResetRequest } from '@contracts/gitcore';
+import { BranchLensStore } from '@core/services/branch-lens.store';
 import { GraphSessionStore } from '@core/services/graph-session.store';
 import { IpcBridge, toAppError, type AppError } from '@core/services/ipc-bridge.service';
 import { LiveRegionService } from '@singularitree/ui-kit';
@@ -65,6 +66,22 @@ function safeInjectGraphSession(): GraphSessionStore | null {
 }
 
 /**
+ * Read the root `BranchLensStore` when one exists, else `null`.
+ *
+ * Mirrors {@link safeInjectGraphSession}: the store is also constructed
+ * directly (`new GraphStore(bridge)`) in unit tests with no DI context, where a
+ * bare `inject()` would throw NG0203. Without a lens store the graph simply
+ * sends an empty `refs` scope — exactly the pre-lens behaviour.
+ */
+function safeInjectBranchLens(): BranchLensStore | null {
+  try {
+    return inject(BranchLensStore, { optional: true });
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Signal store for the commit graph (service-design.md §2.2/§3).
  *
  * Owns the windowed `getCommits` pagination (window 200 + prefetch 100) and the
@@ -90,14 +107,22 @@ export class GraphStore {
    * tests, where the store degrades to the original non-persisting behaviour.
    */
   private readonly graphSession: GraphSessionStore | null;
+  /**
+   * Root-scoped, view-only branch lens (ADR-0042), captured once at
+   * construction (see {@link safeInjectBranchLens}); `null` in plain unit
+   * tests, where the request simply carries an empty `refs` scope.
+   */
+  private readonly lens: BranchLensStore | null;
 
   constructor(
     bridge: IpcBridge = inject(IpcBridge),
     graphSession: GraphSessionStore | null = safeInjectGraphSession(),
+    lens: BranchLensStore | null = safeInjectBranchLens(),
   ) {
     this.bridge = bridge;
     this.liveRegion = safeInjectLiveRegion();
     this.graphSession = graphSession;
+    this.lens = lens;
   }
 
   readonly windowSize = GRAPH_WINDOW_SIZE;
@@ -135,6 +160,12 @@ export class GraphStore {
   readonly commits = signal<Commit[]>([]);
   /** Normalized to one entry per commit (index-aligned with `commits`). */
   readonly lanes = signal<Lane[]>([]);
+  /**
+   * Oids the branch lens reports as reachable from the lensed ref (ADR-0042),
+   * derived from the parallel `inRefs` array. Empty when no lens is active, so
+   * every row renders exactly as before.
+   */
+  readonly lensOids = signal<ReadonlySet<string>>(new Set());
   readonly total = signal(0);
   readonly offset = signal(0);
   readonly loading = signal(false);
@@ -275,6 +306,7 @@ export class GraphStore {
       // successful `loadWindow(0)` repopulates immediately after.
       this.commits.set([]);
       this.lanes.set([]);
+      this.lensOids.set(new Set());
       this.total.set(0);
       await this.loadWindow(0);
       // Refresh the picker's recents now that this repo is the most recent.
@@ -301,6 +333,9 @@ export class GraphStore {
       this.repoId.set(null);
       this.commits.set([]);
       this.lanes.set([]);
+      // The lens scope is scoped to the repo that just failed to open: its
+      // highlighted oids cannot survive the empty-state reset.
+      this.lensOids.set(new Set());
       this.total.set(0);
       this.selectedOid.set(null);
       // The failed repo is gone, so its lock goes with it — a stale pinned
@@ -356,6 +391,8 @@ export class GraphStore {
       repoId: id,
       offset,
       limit: this.windowSize + this.prefetch,
+      // View-only ref scope (ADR-0042): empty means the plain HEAD walk.
+      refs: this.lens?.refs() ?? [],
     };
 
     try {
@@ -372,7 +409,7 @@ export class GraphStore {
       if (isIpcUnavailable(err)) {
         // Degrade to an empty page instead of crashing a plain browser session.
         this.offline.set(true);
-        if (offset <= 0) this.applyPage(0, { commits: [], total: 0, lanes: [] });
+        if (offset <= 0) this.applyPage(0, { commits: [], total: 0, lanes: [], inRefs: [] });
       } else {
         this.error.set(toAppError(err));
       }
@@ -392,6 +429,19 @@ export class GraphStore {
 
   /** Invalidate and reload the first window (fs:changed / HEAD move). */
   reload(): void {
+    void this.loadWindow(0);
+  }
+
+  /**
+   * Reload from offset 0 after the branch lens changed (ADR-0042).
+   *
+   * A lens switches the walk to a different ref scope, so the remembered CDK
+   * viewport offset (and any pending restore) belongs to the previous scope and
+   * must go: the new walk always starts at the top.
+   */
+  reloadForLens(): void {
+    this.scrollOffset.set(0);
+    this.pendingRestore.set(null);
     void this.loadWindow(0);
   }
 
@@ -697,6 +747,7 @@ export class GraphStore {
     }
 
     this.total.set(resp.total ?? 0);
+    this.applyLensPage(offset, page, resp.inRefs ?? []);
 
     // Measure the gauge for the rows just loaded (ADR-0023): lazily, for the
     // visited window only, never the whole history. Fire-and-forget so the
@@ -704,5 +755,34 @@ export class GraphStore {
     void this.loadStats(
       page.map((commit) => commit.oid?.hex).filter((oid): oid is string => !!oid),
     );
+  }
+
+  /**
+   * Pair `resp.inRefs` with `resp.commits` (parallel arrays, ADR-0042) into the
+   * oid set the rows render against. A replacing page (`offset <= 0`) rebuilds
+   * the set; an appended page unions into it so earlier windows keep their
+   * highlights.
+   */
+  private applyLensPage(
+    offset: number,
+    page: readonly Commit[],
+    inRefs: readonly boolean[],
+  ): void {
+    const inside: string[] = [];
+    page.forEach((commit, index) => {
+      const oid = commit.oid?.hex;
+      if (inRefs[index] && oid) inside.push(oid);
+    });
+
+    if (offset <= 0) {
+      this.lensOids.set(new Set(inside));
+      return;
+    }
+    if (inside.length === 0) return;
+    this.lensOids.update((prev) => {
+      const next = new Set(prev);
+      for (const oid of inside) next.add(oid);
+      return next;
+    });
   }
 }

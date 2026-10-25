@@ -90,7 +90,7 @@ func TestListAndGet(t *testing.T) {
 	a := NewAdapter(&fakeRepoPort{fsPath: dir})
 	ctx := context.Background()
 
-	commits, total, err := a.List(ctx, repoID, 0, 10)
+	commits, total, err := a.List(ctx, repoID, nil, 0, 10)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestListPagination(t *testing.T) {
 	a := NewAdapter(&fakeRepoPort{fsPath: dir})
 	ctx := context.Background()
 
-	page, total, err := a.List(ctx, repoID, 1, 1)
+	page, total, err := a.List(ctx, repoID, nil, 1, 1)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestListShortWindowDerivesTotal(t *testing.T) {
 	parent := gitRun(t, dir, "rev-parse", "HEAD~1")
 
 	a := NewAdapter(&fakeRepoPort{fsPath: dir})
-	page, total, err := a.List(context.Background(), domain.RepositoryId("repo-1"), 1, 10)
+	page, total, err := a.List(context.Background(), domain.RepositoryId("repo-1"), nil, 1, 10)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -300,7 +300,7 @@ func TestListPopulatesRefs(t *testing.T) {
 	a := NewAdapter(&fakeRepoPort{fsPath: dir})
 	ctx := context.Background()
 
-	commits, _, err := a.List(ctx, repoID, 0, 10)
+	commits, _, err := a.List(ctx, repoID, nil, 0, 10)
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestListEmptyRepoDegrades(t *testing.T) {
 	repoID := domain.RepositoryId("repo-1")
 	a := NewAdapter(&fakeRepoPort{fsPath: dir})
 
-	commits, total, err := a.List(context.Background(), repoID, 0, 10)
+	commits, total, err := a.List(context.Background(), repoID, nil, 0, 10)
 	if err != nil {
 		t.Fatalf("List on empty repo: %v", err)
 	}

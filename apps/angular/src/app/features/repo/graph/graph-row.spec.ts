@@ -177,4 +177,54 @@ describe('GraphRow (ui-kit)', () => {
     expect(el.querySelector('[data-testid="graph-row-stats"]')).toBeNull();
     expect(el.querySelector('[data-testid="graph-row-additions"]')).toBeNull();
   });
+
+  // -- branch lens (ADR-0042) ----------------------------------------------
+
+  it('reflects the lens state through the three host classes and data-lens', () => {
+    const fixture = render(makeCommit(), makeLane());
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.classList.contains('st-graph-row--lens-active')).toBe(false);
+    expect(el.getAttribute('data-lens')).toBe('');
+
+    fixture.componentRef.setInput('lensActive', true);
+    fixture.componentRef.setInput('inLens', true);
+    fixture.detectChanges();
+
+    expect(el.classList.contains('st-graph-row--lens-active')).toBe(true);
+    expect(el.classList.contains('st-graph-row--lens-inside')).toBe(true);
+    expect(el.classList.contains('st-graph-row--lens-outside')).toBe(false);
+    expect(el.getAttribute('data-lens')).toBe('in');
+
+    fixture.componentRef.setInput('inLens', false);
+    fixture.detectChanges();
+
+    expect(el.classList.contains('st-graph-row--lens-inside')).toBe(false);
+    expect(el.classList.contains('st-graph-row--lens-outside')).toBe(true);
+    expect(el.getAttribute('data-lens')).toBe('out');
+
+    fixture.componentRef.setInput('lensActive', false);
+    fixture.detectChanges();
+
+    expect(el.classList.contains('st-graph-row--lens-active')).toBe(false);
+    expect(el.classList.contains('st-graph-row--lens-outside')).toBe(false);
+    expect(el.getAttribute('data-lens')).toBe('');
+  });
+
+  it('keeps the selected treatment while exposing the lens state', () => {
+    const fixture = render(makeCommit(), makeLane(), true);
+    const el = fixture.nativeElement as HTMLElement;
+
+    fixture.componentRef.setInput('lensActive', true);
+    fixture.componentRef.setInput('inLens', false);
+    fixture.detectChanges();
+
+    // Selection is the stronger state visually (the lens rules are gated on
+    // `:not(.st-graph-row--selected)`), while data-lens stays available to
+    // tests/assistive tooling.
+    expect(el.classList.contains('st-graph-row--selected')).toBe(true);
+    expect(el.classList.contains('st-selection-bar')).toBe(true);
+    expect(el.classList.contains('st-graph-row--lens-outside')).toBe(true);
+    expect(el.getAttribute('data-lens')).toBe('out');
+  });
 });

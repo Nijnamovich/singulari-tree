@@ -2,8 +2,11 @@ import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CdkVirtualScrollViewport } from '@angular/cdk/scrolling';
+import { By } from '@angular/platform-browser';
 import type { Commit, Diff } from '@contracts/domain';
 import type { GetCommitsResponse } from '@contracts/gitcore';
+import { BranchLensStore } from '@core/services/branch-lens.store';
 import { IpcBridge } from '@core/services/ipc-bridge.service';
 import { KeyboardShortcutService } from '@core/services/keyboard-shortcut.service';
 import { RepoState } from '@core/services/repo-state.service';
@@ -51,6 +54,7 @@ function makePage(count: number, total = count): GetCommitsResponse {
       color: i % 8,
       continues: i % 2 === 0,
     })),
+    inRefs: [],
   };
 }
 
@@ -82,6 +86,8 @@ async function setup(commits = 3, total = commits, router?: { navigate: ReturnTy
     clearRefOpError: vi.fn(),
     createBranch: vi.fn(async () => true),
     createTag: vi.fn(async () => true),
+    openCherryPick: vi.fn(),
+    revert: vi.fn(async () => true),
     // Read by the rendered template (the DOM-render test) — not by the
     // instance-only wiring tests.
     currentBranch: vi.fn(() => ''),
@@ -512,6 +518,17 @@ describe('GraphPage', () => {
     expect(page.contextMenu()).toBeNull();
   });
 
+  it('reverts the menu commit on the checked-out branch and closes the menu', async () => {
+    const { page, repoState } = await setup(3);
+    const oid = makeCommit(1).oid?.hex ?? '';
+    page.onRowContextMenu(menuEvent(), makeRow(1));
+
+    page.onRevert(oid);
+
+    expect(repoState.revert).toHaveBeenCalledWith(oid);
+    expect(page.contextMenu()).toBeNull();
+  });
+
   it('routes the tag-create submit to RepoState and closes on success', async () => {
     const { page, repoState } = await setup();
     page.tagDialog.set({ target: 'abc' });
@@ -698,6 +715,132 @@ describe('GraphPage', () => {
     expect(iconText('graph-offline')).toBe('🔌');
     expect(['history', 'offline']).not.toContain(iconText('graph-loading'));
     expect(['history', 'offline']).not.toContain(iconText('graph-offline'));
+  });
+
+  // -- branch lens (ADR-0042) ----------------------------------------------
+
+  it('renders the lens bar only while a lens is active and clears the store from it', async () => {
+    const { store } = await setup(3);
+    const lens = TestBed.inject(BranchLensStore);
+    const fixture = TestBed.createComponent(GraphPage);
+    fixture.detectChanges();
+
+    const query = (testId: string): HTMLElement | null =>
+      (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
+        `[data-testid="${testId}"]`,
+      );
+
+    expect(query('graph-lens-bar')).toBeNull();
+
+    lens.set('feature/x', 'local');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(query('graph-lens-bar')).not.toBeNull();
+    expect(query('graph-lens-ref')?.textContent?.trim()).toBe('feature/x');
+    expect(query('graph-lens-note')?.textContent).toContain(
+      'Commits outside this ref are dimmed.',
+    );
+    expect(query('graph-lens-bar')?.getAttribute('role')).toBe('status');
+    expect(store.loading()).toBe(false);
+
+    (query('graph-lens-clear') as HTMLElement).click();
+    fixture.detectChanges();
+
+    expect(lens.active()).toBe(false);
+    expect(query('graph-lens-bar')).toBeNull();
+  });
+
+  it('reloads the graph from the top when the lens changes, but not on the first run', async () => {
+    const { store } = await setup(3);
+    const lens = TestBed.inject(BranchLensStore);
+    const reloadForLens = vi.spyOn(store, 'reloadForLens');
+
+    // First effect run (no lens): mounting must not re-request the window the
+    // store already loaded, so only a real scope change reloads.
+    TestBed.tick();
+    expect(reloadForLens).not.toHaveBeenCalled();
+
+    lens.set('feature/x', 'local');
+    TestBed.tick();
+    expect(reloadForLens).toHaveBeenCalledTimes(1);
+
+    // Switching straight to another ref is a second, distinct scope change.
+    lens.set('origin/other', 'remote');
+    TestBed.tick();
+    expect(reloadForLens).toHaveBeenCalledTimes(2);
+  });
+
+  it('passes lensActive and inLens membership to each rendered row', async () => {
+    const { store } = await setup(2);
+    const lens = TestBed.inject(BranchLensStore);
+    const fixture = TestBed.createComponent(GraphPage);
+    const el = fixture.nativeElement as HTMLElement;
+    fixture.detectChanges();
+
+    // Give the CDK viewport a real measure in jsdom so it renders rows.
+    const viewport = fixture.debugElement.query(By.directive(CdkVirtualScrollViewport))
+      .componentInstance as CdkVirtualScrollViewport;
+    Object.defineProperty(viewport.elementRef.nativeElement, 'clientHeight', {
+      configurable: true,
+      value: 400,
+    });
+    viewport.checkViewportSize();
+    fixture.detectChanges();
+
+    lens.set('feature/x', 'local');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // The stub page returns no `inRefs`, so seed the membership explicitly.
+    const insideOid = makeCommit(0).oid?.hex as string;
+    store.lensOids.set(new Set([insideOid]));
+    fixture.detectChanges();
+
+    const rows = Array.from(el.querySelectorAll<HTMLElement>('st-graph-row'));
+    expect(rows.length).toBeGreaterThan(0);
+
+    const inside = rows.find((row) => row.getAttribute('data-lens') === 'in');
+    const outside = rows.find((row) => row.getAttribute('data-lens') === 'out');
+    expect(inside).toBeDefined();
+    expect(outside).toBeDefined();
+    expect(inside?.classList.contains('st-graph-row--lens-active')).toBe(true);
+    expect(inside?.classList.contains('st-graph-row--lens-inside')).toBe(true);
+    expect(outside?.classList.contains('st-graph-row--lens-active')).toBe(true);
+    expect(outside?.classList.contains('st-graph-row--lens-outside')).toBe(true);
+  });
+
+  it('opens the cherry-pick dialog for a row picked inside the lens and still selects it', async () => {
+    const { store, page, repoState } = await setup(3);
+    const lens = TestBed.inject(BranchLensStore);
+    lens.set('feature/x', 'local');
+    const oid = makeCommit(1).oid?.hex ?? '';
+
+    page.onRowPicked(makeRow(1));
+
+    expect(store.selectedOid()).toBe(oid);
+    expect(repoState.openCherryPick).toHaveBeenCalledWith(oid);
+  });
+
+  it('only selects a row pick when no lens is active', async () => {
+    const { store, page, repoState } = await setup(3);
+    const oid = makeCommit(1).oid?.hex ?? '';
+
+    page.onRowPicked(makeRow(1));
+
+    expect(store.selectedOid()).toBe(oid);
+    expect(repoState.openCherryPick).not.toHaveBeenCalled();
+  });
+
+  it('opens the shared cherry-pick state from the lens menu output', async () => {
+    const { page, repoState } = await setup(3);
+    page.onRowContextMenu(menuEvent(), makeRow(1));
+
+    page.onLensCherryPick('f'.repeat(40));
+
+    expect(page.contextMenu()).toBeNull();
+    expect(repoState.openCherryPick).toHaveBeenCalledWith('f'.repeat(40));
   });
 
   afterEach(() => {

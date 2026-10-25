@@ -13,6 +13,8 @@ import type { Branch, Commit, Diff, Repository, Tag } from '@contracts/domain';
 import type {
   CheckoutRequest,
   CheckoutResponse,
+  CherryPickRequest,
+  CherryPickResponse,
   CommitRequest,
   CreateBranchRequest,
   CreateTagRequest,
@@ -59,6 +61,9 @@ import type {
   RenameBranchRequest,
   ResetRequest,
   ResetResponse,
+  ResolveRevisionRequest,
+  RevertRequest,
+  RevertResponse,
   SetGitFlowConfigRequest,
   StageHunkRequest,
   StageHunkResponse,
@@ -152,6 +157,20 @@ export interface GitClientApi {
   renameBranch: (req: RenameBranchRequest) => Promise<Branch>;
   deleteBranch: (req: DeleteBranchRequest) => Promise<DeleteBranchResponse>;
   merge: (req: MergeRequest) => Promise<MergeResponse>;
+  /**
+   * Cherry-pick one revision onto the current branch (ADR-0042). `recordOrigin`
+   * maps to `-x`, `noCommit` leaves the result staged. A conflicted pick answers
+   * `hasConflict` and/or rejects with `CHERRY_PICK_CONFLICT`.
+   */
+  cherryPick: (req: CherryPickRequest) => Promise<CherryPickResponse>;
+  /** Revert one revision on the current branch (ADR-0042). */
+  revert: (req: RevertRequest) => Promise<RevertResponse>;
+  /**
+   * Resolve a revision (sha, branch, remote ref, tag or rev expression) to a
+   * commit without mutating anything; an unresolvable revision is
+   * `COMMIT_NOT_FOUND`. Powers the cherry-pick preview (ADR-0042).
+   */
+  resolveRevision: (req: ResolveRevisionRequest) => Promise<Commit>;
   createTag: (req: CreateTagRequest) => Promise<Tag>;
   deleteTag: (req: DeleteTagRequest) => Promise<DeleteTagResponse>;
   stashApply: (req: StashApplyRequest) => Promise<StashApplyResponse>;

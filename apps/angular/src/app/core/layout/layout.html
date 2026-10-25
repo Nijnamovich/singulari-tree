@@ -25,10 +25,11 @@
     (dismiss)="repoState.dismissCheckoutError()"
   />
 
-  <!-- Merge conflicts are surfaced, not resolved, in M3 (ADR-028). -->
+  <!-- Merge / cherry-pick / revert conflicts are surfaced, not resolved (ADR-028, ADR-0042). -->
   <st-merge-conflict-banner
-    [conflict]="repoState.mergeConflict()"
-    (dismiss)="repoState.dismissMergeConflict()"
+    [conflict]="repoState.conflict()"
+    [operation]="repoState.conflict()?.operation ?? 'merge'"
+    (dismiss)="repoState.dismissConflict()"
   />
 
   <!-- BODY: rail | workspace | drawer -->
@@ -41,6 +42,8 @@
       [branches]="repoState.branches()"
       [currentBranch]="repoState.currentBranch()"
       [currentBranchBehind]="repoState.currentBranchBehind()"
+      [lensRef]="lens.ref() ?? ''"
+      [lensKind]="lens.kind() ?? ''"
       [remoteBranches]="repoState.remoteBranches()"
       [tags]="repoState.tags()"
       [remotes]="repoState.remotes()"
@@ -56,6 +59,7 @@
       (workspaceSelected)="onWorkspaceSelected($event)"
       (branchSelected)="onBranchSelected($event)"
       (remoteBranchSelected)="onRemoteBranchSelected($event)"
+      (lensToggled)="onLensToggled($event)"
       (newBranchRequested)="onNewBranchRequested()"
       (newTagRequested)="onNewTagRequested()"
       (branchRenameRequested)="onBranchRenameRequested($event)"
@@ -214,6 +218,27 @@
     [conflict]="repoState.mergeConflict()"
     (submitted)="onMergeSubmitted($event)"
     (cancelled)="onMergeCancelled()"
+  />
+
+  <!-- Cherry-pick a commit onto the current branch (ADR-0042). The dialog is
+       dumb; `RepoState` owns the preview resolution and the mutation, and a
+       conflict keeps it open with a warn row. -->
+  <st-cherry-pick-dialog
+    [open]="repoState.cherryPickDialog() !== null"
+    [currentBranch]="repoState.currentBranch()"
+    [branches]="repoState.branches()"
+    [remoteBranches]="repoState.remoteBranches()"
+    [tags]="repoState.tags()"
+    [defaultSource]="repoState.cherryPickDialog()?.source ?? ''"
+    [running]="repoState.refOpRunning()"
+    [error]="repoState.refOpError()"
+    [conflict]="repoState.conflict()"
+    [preview]="repoState.cherryPreview()"
+    [previewLoading]="repoState.cherryPreviewLoading()"
+    [previewError]="repoState.cherryPreviewError()"
+    (submitted)="onCherryPickSubmitted($event)"
+    (sourceChange)="onCherrySourceChange($event)"
+    (cancelled)="onCherryPickCancelled()"
   />
 
   <!-- Stash apply/pop/drop + stash current changes (ADR-028). -->
