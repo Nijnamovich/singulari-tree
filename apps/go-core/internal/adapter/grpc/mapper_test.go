@@ -188,6 +188,24 @@ func TestGRPCCodeForStashFailed(t *testing.T) {
 	}
 }
 
+// TestGRPCCodeForSequencer pins the cherry-pick/revert mapping (ADR-0042).
+func TestGRPCCodeForSequencer(t *testing.T) {
+	cases := []struct {
+		code string
+		want codes.Code
+	}{
+		{domain.ErrCodeCherryPickConflict, codes.FailedPrecondition},
+		{domain.ErrCodeRevertConflict, codes.FailedPrecondition},
+		{domain.ErrCodeCherryPickFailed, codes.Aborted},
+		{domain.ErrCodeRevertFailed, codes.Aborted},
+	}
+	for _, tc := range cases {
+		if got := grpcCodeFor(tc.code); got != tc.want {
+			t.Errorf("grpcCodeFor(%s) = %v, want %v", tc.code, got, tc.want)
+		}
+	}
+}
+
 func TestFileStatusToProto(t *testing.T) {
 	got := fileStatusToProto(domain.FileStatus{
 		Path:         "src/main.go",

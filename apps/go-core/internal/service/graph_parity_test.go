@@ -144,7 +144,7 @@ func assertLanesMatchGitGraph(t *testing.T, dir string) {
 	repoID := domain.RepositoryId("parity-repo")
 
 	adapter := gitadapter.NewAdapter(&parityRepoPort{fsPath: dir})
-	commits, total, err := adapter.List(ctx, repoID, 0, 1000)
+	commits, total, err := adapter.List(ctx, repoID, nil, 0, 1000)
 	if err != nil {
 		t.Fatalf("adapter.List: %v", err)
 	}

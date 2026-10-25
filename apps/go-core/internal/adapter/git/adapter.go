@@ -116,10 +116,51 @@ func (a *Adapter) Resolve(ctx context.Context, fsPath string) (topLevel, commonD
 	return strings.TrimSpace(topLevel), strings.TrimSpace(commonDir), nil
 }
 
+// validateLensRefs trims and validates caller-supplied lens refs before they
+// reach git. Refs are appended to the argument list as revisions (after the
+// flags, never after `--`), so each one must be a safe bare argument: non-empty,
+// without a leading '-' (which git would parse as an option) and without
+// whitespace or control characters. Blank entries are dropped. An unsafe ref is
+// a typed INVALID_OID error carrying the offending value, mirroring how the read
+// path rejects malformed oids.
+func validateLensRefs(refs []string) ([]string, error) {
+	valid := make([]string, 0, len(refs))
+	for _, raw := range refs {
+		ref := strings.TrimSpace(raw)
+		if ref == "" {
+			continue
+		}
+		if !checkSafeArg(ref) {
+			return nil, domain.AppError{
+				Code:    domain.ErrCodeInvalidOid,
+				Message: "invalid ref",
+				Details: map[string]string{"ref": ref},
+			}
+		}
+		valid = append(valid, ref)
+	}
+	return valid, nil
+}
+
 // List returns a window of commits (topological order, newest first) plus the
 // total number of reachable commits. offset/limit are applied via
 // --skip/--max-count so the full history is never loaded.
-func (a *Adapter) List(ctx context.Context, repoID domain.RepositoryId, offset, limit int) ([]domain.Commit, int, error) {
+//
+// With empty refs the walk starts at HEAD, exactly as the graph has always read
+// it. With non-empty refs it is a branch lens: the walk is the union HEAD ∪ refs
+// and the total is that union's reachable count, so a branch's history can be
+// inspected without checking it out. `git log` only defaults to HEAD while no
+// revision is named, so a lensed walk names HEAD explicitly before appending the
+// refs; without that the HEAD-only commits would drop out of the window and
+// in_refs would have nothing to report as outside the lens. The refs are
+// revisions and therefore go after the flags, never after `--` (which would
+// turn them into path filters). With no refs nothing is appended, so the
+// argument list is byte-identical to the un-lensed historical invocation.
+func (a *Adapter) List(ctx context.Context, repoID domain.RepositoryId, refs []string, offset, limit int) ([]domain.Commit, int, error) {
+	validRefs, err := validateLensRefs(refs)
+	if err != nil {
+		return nil, 0, err
+	}
 	fsPath, err := a.resolvePath(ctx, repoID)
 	if err != nil {
 		return nil, 0, err
@@ -131,15 +172,26 @@ func (a *Adapter) List(ctx context.Context, repoID domain.RepositoryId, offset, 
 		limit = defaultListLimit
 	}
 
-	out, err := runGit(ctx, fsPath, "-c", "log.showSignature=false", "log",
-		"--pretty=format:"+logPrettyFormat,
+	args := []string{"-c", "log.showSignature=false", "log",
+		"--pretty=format:" + logPrettyFormat,
 		"--topo-order",
-		"--skip="+strconv.Itoa(offset),
-		"--max-count="+strconv.Itoa(limit),
-	)
+		"--skip=" + strconv.Itoa(offset),
+		"--max-count=" + strconv.Itoa(limit),
+	}
+	if len(validRefs) > 0 {
+		args = append(args, "HEAD")
+		args = append(args, validRefs...)
+	}
+	out, err := runGit(ctx, fsPath, args...)
 	if err != nil {
 		// An empty repository has no HEAD; report an empty window, not an error.
-		total, countErr := a.countCommits(ctx, fsPath)
+		// That fallback is only valid for the un-lensed walk: a lensed walk
+		// that failed (e.g. its ref was deleted after validation) is a real
+		// failure, and an empty window would mask it.
+		if len(validRefs) > 0 {
+			return nil, 0, err
+		}
+		total, countErr := a.countCommits(ctx, fsPath, validRefs)
 		if countErr != nil || total == 0 {
 			return []domain.Commit{}, 0, nil
 		}
@@ -168,11 +220,53 @@ func (a *Adapter) List(ctx context.Context, repoID domain.RepositoryId, offset, 
 		return commits, offset + len(commits), nil
 	}
 
-	total, err := a.countCommits(ctx, fsPath)
+	total, err := a.countCommits(ctx, fsPath, validRefs)
 	if err != nil {
 		return nil, 0, err
 	}
 	return commits, total, nil
+}
+
+// LensOids returns the oids reachable from refs (the branch-lens membership
+// set) as `git rev-list <refs...>`. It reads reachability only and never checks
+// a ref out. Validation matches the lensed walk, so an unsafe ref is rejected
+// with the same typed error. Empty refs mean "no lens", which has no reachable
+// oids, so no git process is spawned. A walk that fails (e.g. a ref deleted
+// after validation) is a typed COMMIT_NOT_FOUND carrying the validated refs, so
+// the transport maps it to a not-found status instead of a raw Internal. The
+// output is used solely for membership tests: lines are split, trimmed and
+// blank lines skipped without further parsing (a `rev-list` oid is opaque to
+// the service).
+func (a *Adapter) LensOids(ctx context.Context, repoID domain.RepositoryId, refs []string) ([]string, error) {
+	validRefs, err := validateLensRefs(refs)
+	if err != nil {
+		return nil, err
+	}
+	if len(validRefs) == 0 {
+		return []string{}, nil
+	}
+	fsPath, err := a.resolvePath(ctx, repoID)
+	if err != nil {
+		return nil, err
+	}
+	out, err := runGit(ctx, fsPath, append([]string{"rev-list"}, validRefs...)...)
+	if err != nil {
+		// A raw git error would reach the wire as an untranslated Internal
+		// status. A lens ref that no longer resolves is a not-found condition,
+		// so report it as a typed COMMIT_NOT_FOUND carrying the validated refs.
+		return nil, domain.AppError{
+			Code:    domain.ErrCodeCommitNotFound,
+			Message: "cannot resolve the lens ref",
+			Details: map[string]string{"refs": strings.Join(validRefs, " ")},
+		}
+	}
+	oids := make([]string, 0, strings.Count(out, "\n")+1)
+	for _, line := range strings.Split(out, "\n") {
+		if oid := strings.TrimSpace(line); oid != "" {
+			oids = append(oids, oid)
+		}
+	}
+	return oids, nil
 }
 
 // attachRefs populates Commit.Refs in place for the listed commits: branch,
@@ -281,8 +375,16 @@ func (a *Adapter) Get(ctx context.Context, repoID domain.RepositoryId, oid domai
 	return &commits[0], nil
 }
 
-func (a *Adapter) countCommits(ctx context.Context, fsPath string) (int, error) {
-	out, err := runGit(ctx, fsPath, "rev-list", "--count", "HEAD")
+// countCommits returns the number of commits reachable from HEAD or, when refs
+// is non-empty, from the lensed union HEAD ∪ refs. With no refs the invocation
+// is exactly `git rev-list --count HEAD`; with refs HEAD is named again so the
+// count covers the same union the window walk covers.
+func (a *Adapter) countCommits(ctx context.Context, fsPath string, refs []string) (int, error) {
+	args := []string{"rev-list", "--count", "HEAD"}
+	if len(refs) > 0 {
+		args = append(args, refs...)
+	}
+	out, err := runGit(ctx, fsPath, args...)
 	if err != nil {
 		return 0, err
 	}

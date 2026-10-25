@@ -302,9 +302,14 @@ type invalidatingLister struct {
 	all   []domain.Commit
 }
 
-func (l *invalidatingLister) List(_ context.Context, repoID domain.RepositoryId, _, _ int) ([]domain.Commit, int, error) {
+func (l *invalidatingLister) List(_ context.Context, repoID domain.RepositoryId, _ []string, _, _ int) ([]domain.Commit, int, error) {
 	l.cache.Invalidate(repoID)
 	return l.all, len(l.all), nil
+}
+
+// LensOids satisfies domain.CommitLister; the straddle tests are un-lensed.
+func (l *invalidatingLister) LensOids(context.Context, domain.RepositoryId, []string) ([]string, error) {
+	return []string{}, nil
 }
 
 // TestCommitsSkipsWriteThroughWhenInvalidationRacesRead proves the straddle
@@ -316,7 +321,7 @@ func TestCommitsSkipsWriteThroughWhenInvalidationRacesRead(t *testing.T) {
 	cache := &genCache{}
 	svc := NewGraphService(&invalidatingLister{cache: cache, all: all}, cache)
 
-	commits, total, err := svc.Commits(ctx, domain.RepositoryId("repo"), 0, len(all))
+	commits, total, err := svc.Commits(ctx, domain.RepositoryId("repo"), nil, 0, len(all))
 	if err != nil {
 		t.Fatalf("Commits: %v", err)
 	}
@@ -337,7 +342,7 @@ func TestCommitsWritesThroughWhenNoInvalidationRaces(t *testing.T) {
 	cache := &genCache{}
 	svc := NewGraphService(newFakeCommitLister(all), cache)
 
-	if _, _, err := svc.Commits(ctx, domain.RepositoryId("repo"), 0, len(all)); err != nil {
+	if _, _, err := svc.Commits(ctx, domain.RepositoryId("repo"), nil, 0, len(all)); err != nil {
 		t.Fatalf("Commits: %v", err)
 	}
 	if got := cache.putCount(); got != 1 {

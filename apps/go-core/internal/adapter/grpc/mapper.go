@@ -469,6 +469,10 @@ func grpcCodeFor(appCode string) codes.Code {
 		return codes.FailedPrecondition
 	case domain.ErrCodeMergeFailed:
 		return codes.Aborted
+	case domain.ErrCodeCherryPickConflict, domain.ErrCodeRevertConflict:
+		return codes.FailedPrecondition
+	case domain.ErrCodeCherryPickFailed, domain.ErrCodeRevertFailed:
+		return codes.Aborted
 	case domain.ErrCodeTagExists:
 		return codes.FailedPrecondition
 	case domain.ErrCodeRepoPathInUse:

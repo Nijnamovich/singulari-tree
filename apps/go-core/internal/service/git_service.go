@@ -345,6 +345,81 @@ func (s *GitService) Merge(ctx context.Context, repoID domain.RepositoryId, ref 
 	return result, nil
 }
 
+// CherryPick applies source on top of the current branch (ADR-0042).
+// recordOrigin maps to -x and noCommit to --no-commit. A conflict is returned
+// with a non-nil SequencerResult (HasConflict true) and a typed
+// CHERRY_PICK_CONFLICT error; the tree is left conflicted and derived state is
+// refreshed so GetStatus surfaces is_conflicted. Any other failure leaves
+// derived state untouched.
+func (s *GitService) CherryPick(ctx context.Context, repoID domain.RepositoryId, source string, recordOrigin, noCommit bool) (*domain.SequencerResult, error) {
+	if s.gitPort == nil {
+		return nil, domain.AppError{Code: domain.ErrCodeCherryPickFailed, Message: "git not configured"}
+	}
+	// Keep the guard so an unusable source never reaches the port, but carry
+	// the documented rejection token: the ordered contract reports an unusable
+	// source as reason=invalid-source, exactly as the adapter would.
+	if strings.TrimSpace(source) == "" {
+		return nil, domain.AppError{
+			Code:    domain.ErrCodeCherryPickFailed,
+			Message: "cherry-pick source is required",
+			Details: map[string]string{"reason": "invalid-source"},
+		}
+	}
+	result, err := s.gitPort.CherryPick(ctx, repoID, source, recordOrigin, noCommit)
+	if err != nil {
+		var appErr domain.AppError
+		// A conflict still mutated the working tree, so refresh even though an
+		// error is returned; other failures leave the tree untouched.
+		if errors.As(err, &appErr) && appErr.Code == domain.ErrCodeCherryPickConflict {
+			s.afterMutation(repoID)
+		}
+		return result, err
+	}
+	s.afterMutation(repoID)
+	return result, nil
+}
+
+// Revert undoes source on the current branch (ADR-0042). A conflict is returned
+// with a non-nil SequencerResult (HasConflict true) and a typed REVERT_CONFLICT
+// error; as with Merge, the conflicted tree still refreshes derived state.
+func (s *GitService) Revert(ctx context.Context, repoID domain.RepositoryId, source string) (*domain.SequencerResult, error) {
+	if s.gitPort == nil {
+		return nil, domain.AppError{Code: domain.ErrCodeRevertFailed, Message: "git not configured"}
+	}
+	// Same guard and token as CherryPick: the ordered contract reports an
+	// unusable source as reason=invalid-source.
+	if strings.TrimSpace(source) == "" {
+		return nil, domain.AppError{
+			Code:    domain.ErrCodeRevertFailed,
+			Message: "revert source is required",
+			Details: map[string]string{"reason": "invalid-source"},
+		}
+	}
+	result, err := s.gitPort.Revert(ctx, repoID, source)
+	if err != nil {
+		var appErr domain.AppError
+		if errors.As(err, &appErr) && appErr.Code == domain.ErrCodeRevertConflict {
+			s.afterMutation(repoID)
+		}
+		return result, err
+	}
+	s.afterMutation(repoID)
+	return result, nil
+}
+
+// ResolveRevision resolves a revision to its commit for the cherry-pick/revert
+// preview (ADR-0042). It is read-only: no cache invalidation and no watcher
+// notification.
+func (s *GitService) ResolveRevision(ctx context.Context, repoID domain.RepositoryId, revision string) (*domain.Commit, error) {
+	if s.gitPort == nil {
+		return nil, domain.AppError{Code: domain.ErrCodeCommitNotFound, Message: "git not configured"}
+	}
+	if strings.TrimSpace(revision) == "" {
+		return nil, domain.AppError{Code: domain.ErrCodeCommitNotFound, Message: "revision is required"}
+	}
+	return s.gitPort.ResolveRevision(ctx, repoID, revision)
+}
+
 // TagCreate creates a tag (annotated or lightweight, ADR-028). An empty target
 // means HEAD; force maps to `git tag -f`.
 func (s *GitService) TagCreate(ctx context.Context, repoID domain.RepositoryId, name, target string, annotated bool, message string, force bool) (*domain.Tag, error) {

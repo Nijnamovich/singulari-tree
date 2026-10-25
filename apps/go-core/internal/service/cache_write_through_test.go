@@ -33,7 +33,7 @@ func TestCommitsWriteThroughPopulatesSQLite(t *testing.T) {
 	cache := NewCacheServiceWithStore(10, repository.NewCommitCache(db))
 	svc := NewGraphService(lister, cache)
 
-	commits, total, err := svc.Commits(ctx, repo.ID, 0, len(all))
+	commits, total, err := svc.Commits(ctx, repo.ID, nil, 0, len(all))
 	if err != nil {
 		t.Fatalf("Commits: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestCommitsWriteThroughPopulatesSQLite(t *testing.T) {
 
 	// Second read must hit L1: the Git lister is not called again.
 	before := lister.callCount()
-	again, total2, err := svc.Commits(ctx, repo.ID, 0, len(all))
+	again, total2, err := svc.Commits(ctx, repo.ID, nil, 0, len(all))
 	if err != nil {
 		t.Fatalf("Commits (second): %v", err)
 	}
