@@ -60,6 +60,22 @@ interface RowMenu {
   },
   template: `
     @if (!collapsed()) {
+      <!--
+        Collapse control first: it is the first in-flow element, so its position
+        at the rail's top-right cannot depend on how tall the lists render.
+      -->
+      <div class="st-rail__footer">
+        <button
+          class="st-rail__collapse"
+          type="button"
+          (click)="collapseToggle.emit()"
+          title="Collapse"
+          i18n-title
+        >
+          «
+        </button>
+      </div>
+
       @if (repoName() || repoPath()) {
         <div class="st-rail__repo" data-testid="st-rail-repo-header">
           @if (repoName()) {
@@ -434,18 +450,6 @@ interface RowMenu {
           </button>
         </div>
       }
-
-      <div class="st-rail__footer">
-        <button
-          class="st-rail__collapse"
-          type="button"
-          (click)="collapseToggle.emit()"
-          title="Collapse"
-          i18n-title
-        >
-          «
-        </button>
-      </div>
     } @else {
       <button
         class="st-rail__collapse"
@@ -780,8 +784,10 @@ interface RowMenu {
       color: var(--st-color-danger);
     }
 
+    /* Pinned to the rail's top-right: the control is the first in-flow element
+       and never grows, so the lists below cannot move it. */
     .st-rail__footer {
-      margin-top: auto;
+      flex: none;
       padding: var(--st-space-2);
       display: flex;
       justify-content: flex-end;
@@ -813,16 +819,15 @@ interface RowMenu {
 
       .st-rail__repo {
         flex: 1 1 100%;
+        /* Keep the identity card leading the wrapped chip strip, ahead of the
+           collapse chip that now renders first in DOM order. */
+        order: -1;
       }
 
       .st-rail__section {
         flex: 0 1 auto;
         border-bottom: 0;
         border-right: var(--st-hairline) solid var(--st-color-border);
-      }
-
-      .st-rail__footer {
-        margin-top: 0;
       }
 
       .st-rail__filter {

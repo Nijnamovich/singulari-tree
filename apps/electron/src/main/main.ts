@@ -21,6 +21,11 @@ import {
 // `app://` scheme is registered in time.
 registerPrivilegedSchemes();
 
+// Must match `appId` in electron-builder.yml: Windows uses the AppUserModelId
+// to attribute the window/taskbar entry to SingulariTree instead of the generic
+// Electron host.
+app.setAppUserModelId('com.singularitree.app');
+
 let mainWindow: BrowserWindow | null = null;
 let supervisor: Supervisor | null = null;
 

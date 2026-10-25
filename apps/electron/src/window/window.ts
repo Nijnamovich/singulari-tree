@@ -1,6 +1,18 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import * as path from 'node:path';
 import { getCsp } from './csp';
+
+/**
+ * Brand icon for the window and Windows/Linux taskbar. `build/` is
+ * electron-builder's buildResources directory, so it is NOT part of the asar
+ * bundle: a packaged build receives it through `extraResources`, while a dev
+ * run resolves it from the package root (app.getAppPath() === apps/electron).
+ */
+function resolveWindowIcon(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'build', 'icon.png')
+    : path.join(app.getAppPath(), 'build', 'icon.png');
+}
 
 export function createMainWindow(): BrowserWindow {
   const isDev = Boolean(process.env['VITE_DEV_SERVER_URL'] ?? process.env['ELECTRON_START_URL']);
@@ -15,6 +27,9 @@ export function createMainWindow(): BrowserWindow {
     // The shell cannot read CSS custom properties, so the value is a literal and
     // must be updated with the token.
     backgroundColor: '#1e1e2e',
+    // Brand glyph: without this the shell and its taskbar entry fall back to
+    // Electron's generic icon.
+    icon: resolveWindowIcon(),
     webPreferences: {
       contextIsolation: true,
       sandbox: true,
