@@ -391,6 +391,55 @@ export interface MergeResponse {
   oid: string;
 }
 
+// --- Cherry-pick / revert (ADR-0042) ---------------------------------------
+
+/**
+ * Cherry-pick ONE commit onto the current branch (ADR-0042). `source` is a
+ * single bare revision string — sha, short sha, local branch, remote-tracking
+ * ref, tag or rev expression — resolved to a commit inside the core; the
+ * renderer never builds a git command. `recordOrigin` maps to `-x` (append the
+ * picked commit's subject to the new message) and `noCommit` to `--no-commit`
+ * (leave the change staged, commit nothing).
+ */
+export interface CherryPickRequest {
+  repoId: string;
+  source: string;
+  recordOrigin: boolean;
+  noCommit: boolean;
+}
+
+/**
+ * Conflict is data, not an error (same envelope as `MergeResponse`): the tree
+ * is left conflicted and `GetStatus` reports it. `oid` is the resulting commit —
+ * on conflict the pre-existing HEAD, since nothing was committed. The typed
+ * `CHERRY_PICK_CONFLICT` / `REVERT_CONFLICT` code rides the error trailer.
+ */
+export interface CherryPickResponse {
+  hasConflict: boolean;
+  oid: string;
+}
+
+/** Revert ONE commit on the current branch (ADR-0042); `source` as above. */
+export interface RevertRequest {
+  repoId: string;
+  source: string;
+}
+
+/** Revert result — conflict is data, as in `CherryPickResponse`. */
+export interface RevertResponse {
+  hasConflict: boolean;
+  oid: string;
+}
+
+/**
+ * Read-only revision → commit resolution for the cherry-pick/revert preview
+ * (ADR-0042). An unresolvable revision is `COMMIT_NOT_FOUND`.
+ */
+export interface ResolveRevisionRequest {
+  repoId: string;
+  revision: string;
+}
+
 export interface CreateTagRequest {
   repoId: string;
   name: string;
@@ -761,6 +810,10 @@ export interface GitClientApi {
   renameBranch: (req: RenameBranchRequest) => Promise<Branch>;
   deleteBranch: (req: DeleteBranchRequest) => Promise<DeleteBranchResponse>;
   merge: (req: MergeRequest) => Promise<MergeResponse>;
+  // Cherry-pick / revert one commit + read-only revision resolution (ADR-0042).
+  cherryPick: (req: CherryPickRequest) => Promise<CherryPickResponse>;
+  revert: (req: RevertRequest) => Promise<RevertResponse>;
+  resolveRevision: (req: ResolveRevisionRequest) => Promise<Commit>;
   createTag: (req: CreateTagRequest) => Promise<Tag>;
   deleteTag: (req: DeleteTagRequest) => Promise<DeleteTagResponse>;
   stashApply: (req: StashApplyRequest) => Promise<StashApplyResponse>;
@@ -831,6 +884,9 @@ const api: GitClientApi = {
   renameBranch: (req) => ipcRenderer.invoke('git:renameBranch', req),
   deleteBranch: (req) => ipcRenderer.invoke('git:deleteBranch', req),
   merge: (req) => ipcRenderer.invoke('git:merge', req),
+  cherryPick: (req) => ipcRenderer.invoke('git:cherryPick', req),
+  revert: (req) => ipcRenderer.invoke('git:revert', req),
+  resolveRevision: (req) => ipcRenderer.invoke('git:resolveRevision', req),
   createTag: (req) => ipcRenderer.invoke('git:createTag', req),
   deleteTag: (req) => ipcRenderer.invoke('git:deleteTag', req),
   stashApply: (req) => ipcRenderer.invoke('git:stashApply', req),

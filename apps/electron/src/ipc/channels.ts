@@ -26,6 +26,10 @@ export const CHANNELS = {
   renameBranch: 'git:renameBranch',
   deleteBranch: 'git:deleteBranch',
   merge: 'git:merge',
+  // Cherry-pick / revert one commit + read-only revision resolution (ADR-0042).
+  cherryPick: 'git:cherryPick',
+  revert: 'git:revert',
+  resolveRevision: 'git:resolveRevision',
   createTag: 'git:createTag',
   deleteTag: 'git:deleteTag',
   stashApply: 'git:stashApply',
@@ -84,7 +88,7 @@ export type MenuChannelName = (typeof MENU_CHANNELS)[keyof typeof MENU_CHANNELS]
  * Renderer → main readiness ack for deep-link delivery (ADR-025).
  *
  * A one-way, non-RPC signal (never an `ipcMain.handle` target), so it stays
- * outside `CHANNELS`/`CHANNEL_TO_RPC` and does not alter the frozen 43-channel
+ * outside `CHANNELS`/`CHANNEL_TO_RPC` and does not alter the frozen 46-channel
  * RPC surface. The renderer sends it once its Angular bootstrap has subscribed
  * to the `deeplink:open` event, letting the shell drain its queued links in
  * order without racing `did-finish-load`.
@@ -122,6 +126,9 @@ export const CHANNEL_TO_RPC = {
   [CHANNELS.renameBranch]: 'RenameBranch',
   [CHANNELS.deleteBranch]: 'DeleteBranch',
   [CHANNELS.merge]: 'Merge',
+  [CHANNELS.cherryPick]: 'CherryPick',
+  [CHANNELS.revert]: 'Revert',
+  [CHANNELS.resolveRevision]: 'ResolveRevision',
   [CHANNELS.createTag]: 'CreateTag',
   [CHANNELS.deleteTag]: 'DeleteTag',
   [CHANNELS.stashApply]: 'StashApply',

@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { DEEP_LINK_READY_CHANNEL } from '../src/ipc/channels';
+import { CHANNELS, DEEP_LINK_READY_CHANNEL } from '../src/ipc/channels';
 
 /**
  * The preload runs in a `sandbox: true` renderer (`src/window/window.ts`), whose
@@ -28,5 +28,16 @@ describe('preload sandbox constraints', () => {
   it('inlines the deep-link readiness channel in sync with channels.ts', () => {
     // The literal must match `DEEP_LINK_READY_CHANNEL`; the preload cannot import it.
     expect(preloadSrc).toContain(`'${DEEP_LINK_READY_CHANNEL}'`);
+  });
+
+  it('inlines the ADR-0042 git channels in sync with channels.ts', () => {
+    // Same sandbox constraint: these literals cannot be imported either.
+    for (const channel of [
+      CHANNELS.cherryPick,
+      CHANNELS.revert,
+      CHANNELS.resolveRevision,
+    ]) {
+      expect(preloadSrc).toContain(`'${channel}'`);
+    }
   });
 });
