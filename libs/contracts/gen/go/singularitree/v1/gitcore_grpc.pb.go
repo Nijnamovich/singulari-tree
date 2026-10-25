@@ -49,6 +49,9 @@ const (
 	GitCore_RenameBranch_FullMethodName       = "/singularitree.v1.GitCore/RenameBranch"
 	GitCore_DeleteBranch_FullMethodName       = "/singularitree.v1.GitCore/DeleteBranch"
 	GitCore_Merge_FullMethodName              = "/singularitree.v1.GitCore/Merge"
+	GitCore_CherryPick_FullMethodName         = "/singularitree.v1.GitCore/CherryPick"
+	GitCore_Revert_FullMethodName             = "/singularitree.v1.GitCore/Revert"
+	GitCore_ResolveRevision_FullMethodName    = "/singularitree.v1.GitCore/ResolveRevision"
 	GitCore_CreateTag_FullMethodName          = "/singularitree.v1.GitCore/CreateTag"
 	GitCore_DeleteTag_FullMethodName          = "/singularitree.v1.GitCore/DeleteTag"
 	GitCore_StashApply_FullMethodName         = "/singularitree.v1.GitCore/StashApply"
@@ -112,6 +115,16 @@ type GitCoreClient interface {
 	RenameBranch(ctx context.Context, in *RenameBranchRequest, opts ...grpc.CallOption) (*Branch, error)
 	DeleteBranch(ctx context.Context, in *DeleteBranchRequest, opts ...grpc.CallOption) (*DeleteBranchResponse, error)
 	Merge(ctx context.Context, in *MergeRequest, opts ...grpc.CallOption) (*MergeResponse, error)
+	// Cherry-pick / revert ONE commit onto the current branch (ADR-0042). The
+	// renderer sends one bare revision string; the core resolves it to a commit
+	// and refuses anything it cannot safely apply (merge commits, a busy
+	// sequencer, a detached HEAD). A conflict is surfaced as data, exactly like
+	// Merge: the tree is left conflicted and the response reports has_conflict.
+	CherryPick(ctx context.Context, in *CherryPickRequest, opts ...grpc.CallOption) (*CherryPickResponse, error)
+	Revert(ctx context.Context, in *RevertRequest, opts ...grpc.CallOption) (*RevertResponse, error)
+	// Read-only revision -> commit resolution for the cherry-pick preview, so the
+	// dialog can show the target before applying anything.
+	ResolveRevision(ctx context.Context, in *ResolveRevisionRequest, opts ...grpc.CallOption) (*Commit, error)
 	CreateTag(ctx context.Context, in *CreateTagRequest, opts ...grpc.CallOption) (*Tag, error)
 	DeleteTag(ctx context.Context, in *DeleteTagRequest, opts ...grpc.CallOption) (*DeleteTagResponse, error)
 	StashApply(ctx context.Context, in *StashApplyRequest, opts ...grpc.CallOption) (*StashApplyResponse, error)
@@ -447,6 +460,36 @@ func (c *gitCoreClient) Merge(ctx context.Context, in *MergeRequest, opts ...grp
 	return out, nil
 }
 
+func (c *gitCoreClient) CherryPick(ctx context.Context, in *CherryPickRequest, opts ...grpc.CallOption) (*CherryPickResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CherryPickResponse)
+	err := c.cc.Invoke(ctx, GitCore_CherryPick_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gitCoreClient) Revert(ctx context.Context, in *RevertRequest, opts ...grpc.CallOption) (*RevertResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevertResponse)
+	err := c.cc.Invoke(ctx, GitCore_Revert_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gitCoreClient) ResolveRevision(ctx context.Context, in *ResolveRevisionRequest, opts ...grpc.CallOption) (*Commit, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Commit)
+	err := c.cc.Invoke(ctx, GitCore_ResolveRevision_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gitCoreClient) CreateTag(ctx context.Context, in *CreateTagRequest, opts ...grpc.CallOption) (*Tag, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Tag)
@@ -661,6 +704,16 @@ type GitCoreServer interface {
 	RenameBranch(context.Context, *RenameBranchRequest) (*Branch, error)
 	DeleteBranch(context.Context, *DeleteBranchRequest) (*DeleteBranchResponse, error)
 	Merge(context.Context, *MergeRequest) (*MergeResponse, error)
+	// Cherry-pick / revert ONE commit onto the current branch (ADR-0042). The
+	// renderer sends one bare revision string; the core resolves it to a commit
+	// and refuses anything it cannot safely apply (merge commits, a busy
+	// sequencer, a detached HEAD). A conflict is surfaced as data, exactly like
+	// Merge: the tree is left conflicted and the response reports has_conflict.
+	CherryPick(context.Context, *CherryPickRequest) (*CherryPickResponse, error)
+	Revert(context.Context, *RevertRequest) (*RevertResponse, error)
+	// Read-only revision -> commit resolution for the cherry-pick preview, so the
+	// dialog can show the target before applying anything.
+	ResolveRevision(context.Context, *ResolveRevisionRequest) (*Commit, error)
 	CreateTag(context.Context, *CreateTagRequest) (*Tag, error)
 	DeleteTag(context.Context, *DeleteTagRequest) (*DeleteTagResponse, error)
 	StashApply(context.Context, *StashApplyRequest) (*StashApplyResponse, error)
@@ -776,6 +829,15 @@ func (UnimplementedGitCoreServer) DeleteBranch(context.Context, *DeleteBranchReq
 }
 func (UnimplementedGitCoreServer) Merge(context.Context, *MergeRequest) (*MergeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Merge not implemented")
+}
+func (UnimplementedGitCoreServer) CherryPick(context.Context, *CherryPickRequest) (*CherryPickResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CherryPick not implemented")
+}
+func (UnimplementedGitCoreServer) Revert(context.Context, *RevertRequest) (*RevertResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Revert not implemented")
+}
+func (UnimplementedGitCoreServer) ResolveRevision(context.Context, *ResolveRevisionRequest) (*Commit, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveRevision not implemented")
 }
 func (UnimplementedGitCoreServer) CreateTag(context.Context, *CreateTagRequest) (*Tag, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateTag not implemented")
@@ -1370,6 +1432,60 @@ func _GitCore_Merge_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
+func _GitCore_CherryPick_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CherryPickRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GitCoreServer).CherryPick(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GitCore_CherryPick_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GitCoreServer).CherryPick(ctx, req.(*CherryPickRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GitCore_Revert_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevertRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GitCoreServer).Revert(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GitCore_Revert_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GitCoreServer).Revert(ctx, req.(*RevertRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GitCore_ResolveRevision_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveRevisionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GitCoreServer).ResolveRevision(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: GitCore_ResolveRevision_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GitCoreServer).ResolveRevision(ctx, req.(*ResolveRevisionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _GitCore_CreateTag_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateTagRequest)
 	if err := dec(in); err != nil {
@@ -1698,6 +1814,18 @@ var GitCore_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Merge",
 			Handler:    _GitCore_Merge_Handler,
+		},
+		{
+			MethodName: "CherryPick",
+			Handler:    _GitCore_CherryPick_Handler,
+		},
+		{
+			MethodName: "Revert",
+			Handler:    _GitCore_Revert_Handler,
+		},
+		{
+			MethodName: "ResolveRevision",
+			Handler:    _GitCore_ResolveRevision_Handler,
 		},
 		{
 			MethodName: "CreateTag",

@@ -71,6 +71,13 @@ const (
 	// tracked by another repository. Next free numbers after 32.
 	ErrorCode_REPO_PATH_MISSING ErrorCode = 33
 	ErrorCode_REPO_PATH_IN_USE  ErrorCode = 34
+	// Additive: cherry-pick / revert (ADR-0042), next free numbers after 34.
+	// CONFLICT -> FailedPrecondition (the tree is left conflicted, as MERGE_CONFLICT);
+	// FAILED -> Aborted (the operation did not change the tree).
+	ErrorCode_CHERRY_PICK_CONFLICT ErrorCode = 35
+	ErrorCode_CHERRY_PICK_FAILED   ErrorCode = 36
+	ErrorCode_REVERT_CONFLICT      ErrorCode = 37
+	ErrorCode_REVERT_FAILED        ErrorCode = 38
 )
 
 // Enum value maps for ErrorCode.
@@ -111,6 +118,10 @@ var (
 		32: "GIT_FLOW_FAILED",
 		33: "REPO_PATH_MISSING",
 		34: "REPO_PATH_IN_USE",
+		35: "CHERRY_PICK_CONFLICT",
+		36: "CHERRY_PICK_FAILED",
+		37: "REVERT_CONFLICT",
+		38: "REVERT_FAILED",
 	}
 	ErrorCode_value = map[string]int32{
 		"ERROR_CODE_UNSPECIFIED": 0,
@@ -148,6 +159,10 @@ var (
 		"GIT_FLOW_FAILED":        32,
 		"REPO_PATH_MISSING":      33,
 		"REPO_PATH_IN_USE":       34,
+		"CHERRY_PICK_CONFLICT":   35,
+		"CHERRY_PICK_FAILED":     36,
+		"REVERT_CONFLICT":        37,
+		"REVERT_FAILED":          38,
 	}
 )
 
@@ -250,7 +265,7 @@ const file_errors_proto_rawDesc = "" +
 	"\adetails\x18\x03 \x03(\v2'.singularitree.v1.AppError.DetailsEntryR\adetails\x1a:\n" +
 	"\fDetailsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\xd4\x05\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01*\xae\x06\n" +
 	"\tErrorCode\x12\x1a\n" +
 	"\x16ERROR_CODE_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eREPO_NOT_FOUND\x10\x01\x12\x12\n" +
@@ -289,7 +304,11 @@ const file_errors_proto_rawDesc = "" +
 	"\rTAG_NOT_FOUND\x10\x1f\x12\x13\n" +
 	"\x0fGIT_FLOW_FAILED\x10 \x12\x15\n" +
 	"\x11REPO_PATH_MISSING\x10!\x12\x14\n" +
-	"\x10REPO_PATH_IN_USE\x10\"BJZHgithub.com/SingulariTree/go-core/gen/go/singularitree/v1;singularitreev1b\x06proto3"
+	"\x10REPO_PATH_IN_USE\x10\"\x12\x18\n" +
+	"\x14CHERRY_PICK_CONFLICT\x10#\x12\x16\n" +
+	"\x12CHERRY_PICK_FAILED\x10$\x12\x13\n" +
+	"\x0fREVERT_CONFLICT\x10%\x12\x11\n" +
+	"\rREVERT_FAILED\x10&BJZHgithub.com/SingulariTree/go-core/gen/go/singularitree/v1;singularitreev1b\x06proto3"
 
 var (
 	file_errors_proto_rawDescOnce sync.Once

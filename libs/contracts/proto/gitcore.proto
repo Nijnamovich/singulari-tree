@@ -50,6 +50,16 @@ service GitCore {
   rpc RenameBranch(RenameBranchRequest) returns (.singularitree.v1.Branch);
   rpc DeleteBranch(DeleteBranchRequest) returns (DeleteBranchResponse);
   rpc Merge(MergeRequest) returns (MergeResponse);
+  // Cherry-pick / revert ONE commit onto the current branch (ADR-0042). The
+  // renderer sends one bare revision string; the core resolves it to a commit
+  // and refuses anything it cannot safely apply (merge commits, a busy
+  // sequencer, a detached HEAD). A conflict is surfaced as data, exactly like
+  // Merge: the tree is left conflicted and the response reports has_conflict.
+  rpc CherryPick(CherryPickRequest) returns (CherryPickResponse);
+  rpc Revert(RevertRequest) returns (RevertResponse);
+  // Read-only revision -> commit resolution for the cherry-pick preview, so the
+  // dialog can show the target before applying anything.
+  rpc ResolveRevision(ResolveRevisionRequest) returns (.singularitree.v1.Commit);
   rpc CreateTag(CreateTagRequest) returns (.singularitree.v1.Tag);
   rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
   rpc StashApply(StashApplyRequest) returns (StashApplyResponse);
@@ -98,6 +108,13 @@ message GetCommitsRequest {
   string repo_id = 1;
   uint32 offset = 2;
   uint32 limit = 3;
+  // Opt-in ref scope (ADR-0042). Empty means "walk from HEAD", which is the
+  // pre-existing behaviour and stays bit-identical (cache included). One or
+  // more refs switches the walk to the union HEAD ∪ refs in topological order,
+  // which is how the branch lens shows a branch's own history without checking
+  // it out; a lensed walk always bypasses the commit-window cache, whose key
+  // carries no ref dimension.
+  repeated string refs = 4;
 }
 message GetCommitsResponse {
   repeated Commit commits = 1;
@@ -105,6 +122,11 @@ message GetCommitsResponse {
   // Parallel-array contract: lanes is index-aligned with commits, i.e.
   // lanes[i] is the lane assignment for commits[i]; both arrays share length.
   repeated Lane lanes = 3; // parallel to `commits`: lanes[i] belongs to commits[i]
+  // Parallel-array contract for the branch lens (ADR-0042): in_refs[i] is true
+  // when commits[i] is reachable from the requested `refs`, i.e. it belongs to
+  // the lensed branch/tag. Always empty when the request had no refs (the
+  // renderer then renders exactly today's graph).
+  repeated bool in_refs = 4; // parallel to `commits`, same length as `refs` non-empty
 }
 message StreamCommitsRequest {
   string repo_id = 1;
@@ -143,6 +165,41 @@ message DeleteBranchRequest { string repo_id = 1; string name = 2; bool force = 
 message DeleteBranchResponse {}
 message MergeRequest { string repo_id = 1; string ref = 2; MergeStrategy strategy = 3; bool no_commit = 4; string message = 5; }
 message MergeResponse { bool has_conflict = 1; string oid = 2; }
+
+// Cherry-pick / revert (ADR-0042). Field numbers are append-only.
+//
+// `source` is ONE bare revision string — a sha, a short sha, a local branch, a
+// remote-tracking ref, a tag or a rev expression — resolved to a commit inside
+// the core. There is no kind discriminator on the wire (the Merge.ref /
+// Reset.to / CreateTag.target convention) and the renderer never builds a
+// command or sends a flag. `record_origin` maps to `-x`; `no_commit` maps to
+// `--no-commit` (the change is left staged and nothing is committed).
+message CherryPickRequest {
+  string repo_id = 1;
+  string source = 2;
+  bool record_origin = 3;
+  bool no_commit = 4;
+}
+message CherryPickResponse {
+  bool has_conflict = 1;
+  string oid = 2;
+}
+message RevertRequest {
+  string repo_id = 1;
+  string source = 2;
+}
+message RevertResponse {
+  bool has_conflict = 1;
+  string oid = 2;
+}
+// ResolveRevisionRequest resolves a revision to a commit without mutating
+// anything (ADR-0042): the cherry-pick dialog previews sha/subject/author/date
+// before the user applies. An unresolvable revision is COMMIT_NOT_FOUND.
+message ResolveRevisionRequest {
+  string repo_id = 1;
+  string revision = 2;
+}
+
 message CreateTagRequest { string repo_id = 1; string name = 2; string target = 3; bool annotated = 4; string message = 5; bool force = 6; }
 message DeleteTagRequest { string repo_id = 1; string name = 2; }
 message DeleteTagResponse {}
