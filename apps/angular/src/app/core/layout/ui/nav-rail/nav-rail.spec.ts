@@ -591,4 +591,31 @@ describe('NavRail', () => {
     el.querySelector<HTMLButtonElement>('.st-rail__collapse')!.click();
     expect(collapsedToggles).toBe(1);
   });
+
+  it('pins the collapse control above the repo header in the expanded rail', async () => {
+    const fixture = await setup({
+      repoName: 'alpha',
+      repoPath: '/tmp/alpha',
+      currentBranch: 'main',
+    });
+    const host = fixture.nativeElement as HTMLElement;
+
+    // First in-flow element: the button cannot drift down when the branch /
+    // remote / tag / stash lists finish loading.
+    const footer = host.firstElementChild as HTMLElement;
+    expect(footer.classList.contains('st-rail__footer')).toBe(true);
+    expect(footer.querySelectorAll('.st-rail__collapse')).toHaveLength(1);
+
+    const repoHeader = host.querySelector('[data-testid="st-rail-repo-header"]');
+    expect(repoHeader).not.toBeNull();
+    expect(
+      footer.compareDocumentPosition(repoHeader!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    // The collapsed branch keeps exactly one (expand) control.
+    const collapsed = await setup({ collapsed: true });
+    expect(
+      (collapsed.nativeElement as HTMLElement).querySelectorAll('.st-rail__collapse'),
+    ).toHaveLength(1);
+  });
 });

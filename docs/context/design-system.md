@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-20
+last_updated: 2026-10-25
 status: active
 description: Shipped SingulariTree renderer design system — the Dark Neon / Developer Studio palette in dark and light, the two-tier CSS custom property vocabulary, typography, spacing and geometry, the ui-kit component inventory, and copy-paste usage.
 tags:
@@ -198,6 +198,7 @@ All numeric columns set `font-variant-numeric: tabular-nums` (`.st-tabular-nums`
 | `--st-size-control-sm` | 24px | small control (icon buttons, toggle segments) |
 | `--st-size-control-md` | 28px | medium control (buttons, inputs) |
 | `--st-size-control-lg` | 32px | large control |
+| `--st-size-tab` | 220px | repo tab base/max width in the shell top bar (uniform tab geometry) |
 | `--st-size-selection-bar-w` | 3px | inset selection bar width |
 
 ### Motion

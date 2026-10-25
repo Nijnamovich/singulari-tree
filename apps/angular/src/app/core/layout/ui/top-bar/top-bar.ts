@@ -262,6 +262,12 @@ export interface TopBarTab {
       align-items: center;
       gap: var(--st-space-1);
       box-sizing: border-box;
+      /* Uniform tab geometry: every tab shares one flex-basis and one cap, so a
+         short label never renders a stubby tab. When the strip is tight they
+         shrink equally (never clip) and the trailing + stays reachable. */
+      flex: 1 1 var(--st-size-tab);
+      max-width: var(--st-size-tab);
+      min-width: 0;
       height: 40px;
       padding: 0 var(--st-space-2) 0 var(--st-space-3);
       /* The hairline is always reserved (transparent when inactive) so the
@@ -294,11 +300,17 @@ export interface TopBarTab {
     .st-tab__body {
       display: flex;
       flex-direction: column;
+      /* Absorb the tab's fixed width so the close button stays at the edge. */
+      flex: 1 1 auto;
       min-width: 0;
       line-height: var(--st-leading-tight);
     }
 
     .st-tab__label {
+      /* Explicit typography: the active state conveys selection via fill,
+         border and colour only, never via a size change. */
+      font-size: var(--st-font-13);
+      font-weight: 600;
       max-width: 180px;
       overflow: hidden;
       text-overflow: ellipsis;

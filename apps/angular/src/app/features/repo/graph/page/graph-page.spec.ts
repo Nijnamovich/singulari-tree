@@ -585,6 +585,25 @@ describe('GraphPage', () => {
     expect(page.graphWidth()).toBe(2 * LANE_COLUMN_WIDTH);
   });
 
+  it('renders the column-header graph column as a decorative lane spacer', async () => {
+    await setup();
+    const fixture = TestBed.createComponent(GraphPage);
+    fixture.detectChanges();
+
+    const header = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="graph-column-headers"]',
+    );
+    expect(header).not.toBeNull();
+
+    const graphColumn = header!.firstElementChild as HTMLElement;
+    // No text label (an 11px uppercase word would overflow the lane gutter):
+    // the column is decorative and only reserves the graph width.
+    expect(graphColumn.classList.contains('st-graph-page__col-graph')).toBe(true);
+    expect(graphColumn.getAttribute('aria-hidden')).toBe('true');
+    expect(graphColumn.textContent?.trim()).toBe('');
+    expect(graphColumn.style.width).toBe(`${fixture.componentInstance.graphWidth()}px`);
+  });
+
   it('clears the filter through the search clear affordance', async () => {
     const { store, page } = await setup();
     store.setFilter('commit 2');

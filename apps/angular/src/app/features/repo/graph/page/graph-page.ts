@@ -148,7 +148,16 @@ import { WipRow } from '../ui/wip-row';
         class="st-eyebrow st-graph-page__columns"
         data-testid="graph-column-headers"
       >
-        <span class="st-graph-page__col-graph" [style.width.px]="graphWidth()" i18n>Graph</span>
+        <!--
+          Decorative spacer, not a label: it only reserves the lane gutter so
+          "Commit / author" stays aligned with the row messages. A text label
+          here would overflow the narrow gutter width.
+        -->
+        <span
+          class="st-graph-page__col-graph"
+          [style.width.px]="graphWidth()"
+          aria-hidden="true"
+        ></span>
         <span class="st-graph-page__col-message" i18n>Commit / author</span>
         <span class="st-graph-page__col-date st-hide-at-1600" i18n>Date</span>
       </div>
@@ -325,8 +334,11 @@ import { WipRow } from '../ui/wip-row';
       line-height: 1;
     }
 
+    /* Fixed lane gutter: keeps the header columns aligned to the row columns.
+       overflow: hidden is a guard only — the column carries no text. */
     .st-graph-page__col-graph {
       flex: none;
+      overflow: hidden;
     }
 
     .st-graph-page__col-message {

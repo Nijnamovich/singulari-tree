@@ -26,6 +26,8 @@ files:
 # Renderer bundle, go-core binary and proto SSOT live outside apps/electron;
 # they are copied verbatim into the packaged resources directory.
 extraResources:
+  - from: build/icon.png
+    to: build/icon.png
   - from: ../../apps/angular/dist/browser
     to: renderer
   - from: ../../dist
@@ -39,6 +41,7 @@ extraResources:
     to: proto
 
 linux:
+  icon: build/icon.png
   target:
     - AppImage
     - deb
@@ -55,6 +58,7 @@ linux:
   maintainer: David <zaraza_9@hotmail.com>
 
 win:
+  icon: build/icon.ico
   target:
     - nsis
     - portable
