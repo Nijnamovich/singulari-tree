@@ -1,0 +1,48 @@
+# Docker build context for the Go core image (repo root context).
+# Container ships ONLY the Go core: no Electron, no Angular, no docs corpus.
+#
+# CRITICAL: do NOT exclude go.work, apps/go-core/** or libs/contracts/gen/**.
+# They are required to compile the core (workspace + replaced contract module).
+
+# Dependencies (npm workspaces are huge and irrelevant to the Go build)
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+**/dist/
+bin/
+tmp/
+
+# VCS metadata
+.git/
+.gitignore
+
+# Non-core apps and libs
+apps/angular/
+apps/angular/.angular/
+apps/electron/
+libs/ui-kit/
+
+# Local runtime data: sockets, DBs, agent state
+ipc/
+.data/
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Documentation corpus (not needed to build the core)
+docs/
+
+# Agent/editor state and lockfiles
+.opencode/
+agents/
+protocols/
+package-lock.json
+*.log
+
+# NOTE: tools/docker/ is intentionally NOT excluded (entrypoint.sh is COPYed).

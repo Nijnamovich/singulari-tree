@@ -1,0 +1,140 @@
+/*
+ * SingulariTree ui-kit — shared utility classes (plan §2.5/§2.6).
+ * Consumed by the ui-kit primitives and the renderer surfaces; every rule
+ * reads its values from the semantic token layer.
+ */
+
+/* Focus ring: 2px with a 2px offset; the inset variant (offset -1px) is for
+   rows and nav items, where a positive offset would bleed outside the row. */
+.st-focus-ring:focus-visible {
+  outline: 2px solid var(--st-color-focus);
+  outline-offset: 2px;
+}
+
+.st-focus-ring--inset:focus-visible {
+  outline: 2px solid var(--st-color-focus);
+  outline-offset: -1px;
+}
+
+/* Hairline separators — panels are separated by 1px lines, never shadows. */
+.st-hairline {
+  border-bottom: var(--st-hairline) solid var(--st-color-border);
+}
+
+.st-hairline--top {
+  border-top: var(--st-hairline) solid var(--st-color-border);
+}
+
+.st-hairline--left {
+  border-left: var(--st-hairline) solid var(--st-color-border);
+}
+
+.st-hairline--right {
+  border-right: var(--st-hairline) solid var(--st-color-border);
+}
+
+/* Eyebrow: 11/600 uppercase, letter-spaced, muted (section group headers). */
+.st-eyebrow {
+  font-size: var(--st-font-11);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--st-color-muted);
+}
+
+/* Mono + tabular figures: hashes, paths, refs, counts, dates. */
+.st-mono {
+  font-family: var(--st-font-mono);
+}
+
+.st-tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hover surface for dense list rows. */
+.st-hover-surface:hover {
+  background: color-mix(in srgb, var(--st-color-text) 6%, transparent);
+}
+
+/*
+ * Selection: ONE reusable treatment (plan §2.5). The fill marks the row, the
+ * 3px inset bar marks it again at the row's leading edge. The bar is a
+ * box-shadow rather than a border so it cannot shift row layout (rows are
+ * virtualized).
+ */
+.st-selectable-row {
+  cursor: pointer;
+}
+
+.st-selectable-row:hover {
+  background: color-mix(in srgb, var(--st-color-text) 6%, transparent);
+}
+
+.st-selectable-row--selected {
+  background: var(--st-color-selected);
+}
+
+.st-selection-bar {
+  box-shadow: inset var(--st-size-selection-bar-w) 0 0 var(--st-color-selected-bar);
+}
+
+/* Motion guard: the OS setting neutralises the whole motion set (plan §2.6).
+   The `:root:not([data-st-motion='on'])` scope keeps an explicit user override
+   "on" alive under `prefers-reduced-motion`: PreferencesService writes
+   `<html data-st-motion="on|off">` and `auto` removes the attribute. */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-st-motion='on']) *,
+  :root:not([data-st-motion='on']) *::before,
+  :root:not([data-st-motion='on']) *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Explicit user override: `off` forces the neutralisation with no media query,
+   so it wins even when the OS does not request reduced motion. */
+:root[data-st-motion='off'] *,
+:root[data-st-motion='off'] *::before,
+:root[data-st-motion='off'] *::after {
+  animation-duration: 0.01ms !important;
+  transition-duration: 0.01ms !important;
+}
+
+/*
+ * Responsive utilities (plan §5 P6). The committed breakpoints are
+ * ≤1600px / ≤1100px / ≤800px; each one only changes structure, never colour.
+ * They progressively drop the date column (≤1600), the author column and flip
+ * the rail workspace list into a chip strip (≤1100), then stack what remains
+ * (≤800, handled by the shell and workspace-split styles).
+ */
+
+@media (max-width: 1600px) {
+  .st-hide-at-1600 {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .st-hide-at-1100 {
+    display: none;
+  }
+
+  /* The rail's workspace list lays its items out as a wrapping chip strip. */
+  .st-chip-strip {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--st-space-1);
+  }
+
+  .st-chip-strip > * {
+    flex: 0 1 auto;
+  }
+}
+
+@media (max-width: 800px) {
+  .st-hide-at-800 {
+    display: none;
+  }
+}

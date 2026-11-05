@@ -1,0 +1,172 @@
+syntax = "proto3";
+
+package singularitree.v1;
+
+// Alias for compatibility: also referred to as gitclient.v1 in docs.
+// buf.build/singularitree/contracts — domain entities mirrored from domain-model.md §4.
+
+option go_package = "github.com/SingulariTree/go-core/gen/go/singularitree/v1;singularitreev1";
+
+// Value object: object ID (SHA-1 40 or SHA-256 64 hex)
+message Oid {
+  string hex = 1; // lowercase hex, validated ^[0-9a-f]{40,64}$
+  string kind = 2; // "SHA1" | "SHA256"
+}
+
+// Value object: signature (author/committer)
+message Signature {
+  string name = 1;
+  string email = 2;
+  string when = 3; // RFC3339
+}
+
+// Value object: ref name (e.g. refs/heads/main, HEAD)
+message RefName {
+  string raw = 1;
+}
+
+// Value object: ref decoration attached to a commit (graph labels).
+message RefLabel {
+  string name = 1; // short label, e.g. "main", "origin/main", "v1.0.0"
+  string kind = 2; // "head" | "branch" | "remote" | "tag"
+}
+
+// Entity: commit (immutable, DAG)
+message Commit {
+  Oid oid = 1;
+  repeated Oid parents = 2;
+  Signature author = 3;
+  Signature committer = 4;
+  string message = 5;
+  Oid tree_oid = 6;
+  string committed_at = 7; // RFC3339
+  repeated RefLabel refs = 8; // ref decorations pointing at this commit (may be empty)
+}
+
+// Value object: lane assignment for one commit row (computed in Go, ADR-008).
+message Lane {
+  int32 index = 1;     // lane/column index
+  int32 color = 2;     // palette slot (renderer maps to a CSS color)
+  bool continues = 3;  // lane continues past this row
+}
+
+// Entity: branch (local or remote)
+message Branch {
+  string name = 1;
+  string ref_name = 2; // RefName.raw
+  Oid tip = 3;
+  string upstream = 4; // optional RefName.raw, empty if none
+  bool is_current = 5;
+  bool is_remote = 6;
+  int32 behind = 7; // commits on the upstream branch not present locally (pull-pending)
+}
+
+// Entity: remote
+message Remote {
+  string name = 1;
+  repeated string urls = 2;
+  repeated string fetch_specs = 3;
+}
+
+// Entity: tag
+message Tag {
+  string name = 1;
+  string ref_name = 2;
+  Oid target = 3;
+  Signature tagger = 4; // optional
+  string message = 5;   // optional
+  bool annotated = 6;
+}
+
+// Entity: stash entry
+message Stash {
+  int32 index = 1;
+  Oid oid = 2;
+  string message = 3;
+  string branch_name = 4; // optional, empty if none
+}
+
+// Entity: worktree
+message Worktree {
+  string fs_path = 1;
+  string branch = 2; // optional RefName.raw
+  Oid head = 3;
+  bool is_main = 4;
+}
+
+// Aggregate root: repository
+message Repository {
+  string id = 1;        // UUID v4
+  string fs_path = 2;   // absolute normalized
+  string common_dir = 3;
+  string name = 4;
+  string created_at = 5;    // RFC3339
+  string last_opened_at = 6; // RFC3339
+}
+
+// Value objects: diff/hunk
+message DiffLine {
+  string kind = 1; // "added" | "removed" | "context"
+  string text = 2;
+  bool no_newline = 3;
+}
+
+message Hunk {
+  int32 from_start = 1;
+  int32 from_lines = 2;
+  int32 to_start = 3;
+  int32 to_lines = 4;
+  repeated DiffLine lines = 5;
+}
+
+// Per-file diff section (ADR-0020). One FileDiff per changed path; it is the
+// addressing substrate for hunk/line staging and discard. `status` is a
+// porcelain-v2 code (M, A, D, R, C, T, U, ...); `old_path` is set only for
+// renames/copies and empty otherwise.
+message FileDiff {
+  string path = 1;
+  string old_path = 2; // optional (renames/copies)
+  string status = 3;   // porcelain v2 code
+  repeated Hunk hunks = 4;
+  int32 additions = 5;
+  int32 deletions = 6;
+  bool is_binary = 7;
+  bool has_conflict_markers = 8;
+}
+
+message Diff {
+  Oid from = 1;
+  Oid to = 2;
+  // DEPRECATED in favor of `files`; flattened for back-compat (every file's
+  // hunks concatenated in git order). Kept so the legacy Monaco viewer and the
+  // e2e suite keep working; never renumber or remove it.
+  repeated Hunk hunks = 3;
+  int32 additions = 4;
+  int32 deletions = 5;
+  bool is_binary = 6;
+  bool has_conflict_markers = 7;
+  // Per-file sections (ADR-0020). Populated alongside the deprecated flat
+  // `hunks`; group by these when addressing a file, hunk or line.
+  repeated FileDiff files = 8;
+  // True when the payload was capped by the core (MaxDiffHunks/MaxDiffLines),
+  // instead of returning an unbounded diff (ADR-0020 (c)).
+  bool truncated = 9;
+}
+
+// Per-commit change-size counts (ADR-0023). Counts only — this entity is cached
+// in SQLite and NEVER carries Git objects/blobs.
+message CommitStats {
+  string oid = 1;
+  int32 additions = 2;
+  int32 deletions = 3;
+  int32 files_changed = 4;
+}
+
+// File status (porcelain v2)
+message FileStatus {
+  string path = 1;
+  string staged = 2;
+  string unstaged = 3;
+  bool is_staged = 4;
+  bool is_conflicted = 5;
+}

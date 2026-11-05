@@ -1,0 +1,23 @@
+version: v2
+modules:
+  - path: proto
+    name: buf.build/singularitree/contracts
+# Also aliased as gitclient.v1 for compatibility (see proto package comments).
+lint:
+  use:
+    - STANDARD
+  except:
+    # The proto layout is deliberate (ipc-strategy.md §2.3 / domain-model.md §4):
+    # entities are shared value objects reused as RPC inputs/outputs, and the
+    # ErrorCode enum is documentation-only (the wire carries AppError.code as a
+    # string). Relax only the rules that conflict with that documented design;
+    # the wire shape is unaffected.
+    - PACKAGE_DIRECTORY_MATCH
+    - PACKAGE_VERSION_SUFFIX
+    - SERVICE_SUFFIX
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - ENUM_VALUE_PREFIX
+breaking:
+  use:
+    - FILE

@@ -1,0 +1,27 @@
+{
+  "name": "@singularitree/ui-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SingulariTree shared Angular UI kit — dumb presentational components",
+  "peerDependencies": {
+    "@angular/core": "^22.0.0",
+    "@angular/common": "^22.0.0",
+    "@angular/cdk": "^22.0.0",
+    "@angular/platform-browser": "^22.0.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^22.2.1",
+    "@angular/compiler-cli": "^22.2.1",
+    "@singularitree/contracts": "*",
+    "ng-packagr": "^22.2.1"
+  },
+  "ngPackage": {
+    "dest": "../../dist/libs/ui-kit",
+    "lib": {
+      "entryFile": "src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "ng-packagr -p ng-package.json -c tsconfig.lib.json"
+  }
+}

@@ -1,0 +1,53 @@
+name: Deploy site to Pages
+
+# The site is plain static HTML/CSS, so there is nothing to build: this
+# workflow only uploads and deploys. Kept separate from ci.yml (different
+# filename, its own concurrency group) so the two never clash.
+on:
+  push:
+    branches: [main]
+    # Only redeploy when the site itself or this workflow changes.
+    paths:
+      - 'website/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+# Never cancel an in-flight Pages deployment mid-publish.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+# Least privilege: actual scopes are granted per-job below.
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # `enablement` (default false) is left unset on purpose: enabling Pages
+      # needs a non-GITHUB_TOKEN, so the human enables it once in repo settings.
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      # Static assets only; no npm/go/playwright step runs before this.
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: website
+
+      # `id` is what the environment url above dereferences.
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520" width="800" height="520" role="img" aria-label="Ilustración de la ventana de SingulariTree con la barra lateral de ramas, el grafo de commits y el panel de detalle">
+  <title>Ilustración de la interfaz de SingulariTree</title>
+  <desc>Mock ilustrativo: barra lateral de ramas, grafo de commits con varias ramas y panel inferior con archivos modificados y un fragmento de diff. No es una captura real del producto.</desc>
+
+  <defs>
+    <clipPath id="win">
+      <rect x="8" y="8" width="784" height="504" rx="16" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#win)">
+    <!-- window base -->
+    <rect x="8" y="8" width="784" height="504" fill="#252536" />
+
+    <!-- title bar -->
+    <rect x="8" y="8" width="784" height="40" fill="#1a1a2e" />
+    <circle cx="30" cy="28" r="5" fill="#ff5f56" />
+    <circle cx="50" cy="28" r="5" fill="#ffbd2e" />
+    <circle cx="70" cy="28" r="5" fill="#27c93f" />
+    <text x="90" y="33" fill="#d6d6de" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="600">SingulariTree</text>
+
+    <!-- sidebar -->
+    <rect x="8" y="48" width="176" height="464" fill="#1e1e2e" />
+    <line x1="184" y1="48" x2="184" y2="512" stroke="#2f2f44" stroke-width="1" />
+    <text x="24" y="76" fill="#8a8a9a" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="700" letter-spacing="1.2">RAMAS</text>
+
+    <g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" fill="#d6d6de">
+      <circle cx="28" cy="99" r="3.5" fill="#0a84ff" />
+      <text x="42" y="103">main</text>
+      <circle cx="28" cy="127" r="3.5" fill="#8a8a9a" />
+      <text x="42" y="131">develop</text>
+      <circle cx="28" cy="155" r="3.5" fill="#a78bfa" />
+      <text x="42" y="159">feature/grafo</text>
+      <circle cx="28" cy="183" r="3.5" fill="#a78bfa" />
+      <text x="42" y="187">feature/monaco</text>
+      <circle cx="28" cy="211" r="3.5" fill="#34d399" />
+      <text x="42" y="215">release/0.1</text>
+    </g>
+    <text x="24" y="252" fill="#8a8a9a" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="700" letter-spacing="1.2">ETIQUETAS</text>
+    <g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" fill="#d6d6de">
+      <circle cx="28" cy="275" r="3.5" fill="#34d399" />
+      <text x="42" y="279">v0.1.0-alpha</text>
+    </g>
+    <text x="24" y="322" fill="#4a9eff" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="600">+ Rama nueva</text>
+
+    <!-- graph area -->
+    <rect x="184" y="48" width="608" height="300" fill="#252536" />
+    <line x1="184" y1="348" x2="792" y2="348" stroke="#2f2f44" stroke-width="1" />
+
+    <!-- WIP row -->
+    <rect x="200" y="76" width="576" height="34" rx="8" fill="rgba(10,132,255,0.15)" />
+    <circle cx="258" cy="93" r="6" fill="#252536" stroke="#0a84ff" stroke-width="2.5" />
+    <text x="286" y="97" fill="#4a9eff" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="600">Cambios sin confirmar (WIP)</text>
+
+    <!-- main line -->
+    <line x1="258" y1="126" x2="258" y2="330" stroke="#4a5568" stroke-width="2" />
+    <!-- feature branch -->
+    <path d="M258 194 L318 206 L318 286 L258 296" fill="none" stroke="#a78bfa" stroke-width="2" />
+
+    <!-- message bars -->
+    <g fill="#3a3a52">
+      <rect x="348" y="120" width="200" height="12" rx="6" />
+      <rect x="348" y="154" width="158" height="12" rx="6" />
+      <rect x="348" y="188" width="220" height="12" rx="6" />
+      <rect x="348" y="222" width="140" height="12" rx="6" />
+      <rect x="348" y="256" width="180" height="12" rx="6" />
+      <rect x="348" y="290" width="120" height="12" rx="6" />
+      <rect x="348" y="324" width="160" height="12" rx="6" />
+    </g>
+
+    <!-- hash chips -->
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9" fill="#8a8a9a">
+      <rect x="698" y="119" width="66" height="14" rx="7" fill="#2a2a3a" stroke="#2f2f44" />
+      <text x="708" y="129">9f3c1a2</text>
+      <rect x="698" y="153" width="66" height="14" rx="7" fill="#2a2a3a" stroke="#2f2f44" />
+      <text x="708" y="163">4b7e0d1</text>
+      <rect x="698" y="187" width="66" height="14" rx="7" fill="#2a2a3a" stroke="#2f2f44" />
+      <text x="708" y="197">c1a9f08</text>
+      <rect x="698" y="221" width="66" height="14" rx="7" fill="#2a2a3a" stroke="#2f2f44" />
+      <text x="708" y="231">77de230</text>
+      <rect x="698" y="255" width="66" height="14" rx="7" fill="#2a2a3a" stroke="#2f2f44" />
+      <text x="708" y="265">0ab44e6</text>
+      <rect x="698" y="289" width="66" height="14" rx="7" fill="#2a2a3a" stroke="#2f2f44" />
+      <text x="708" y="299">e5c1902</text>
+      <rect x="698" y="323" width="66" height="14" rx="7" fill="#2a2a3a" stroke="#2f2f44" />
+      <text x="708" y="333">3d8b771</text>
+    </g>
+
+    <!-- commit nodes -->
+    <g fill="#252536" stroke-width="2.5">
+      <circle cx="258" cy="126" r="5.5" stroke="#0a84ff" />
+      <circle cx="258" cy="160" r="5.5" stroke="#8a8a9a" />
+      <circle cx="258" cy="194" r="5.5" stroke="#0a84ff" />
+      <circle cx="318" cy="206" r="5.5" stroke="#a78bfa" />
+      <circle cx="258" cy="228" r="5.5" stroke="#8a8a9a" />
+      <circle cx="258" cy="262" r="5.5" stroke="#0a84ff" />
+      <circle cx="318" cy="286" r="5.5" stroke="#a78bfa" />
+      <circle cx="258" cy="296" r="5.5" stroke="#8a8a9a" />
+      <circle cx="258" cy="330" r="5.5" stroke="#34d399" />
+    </g>
+
+    <!-- detail panel -->
+    <rect x="184" y="348" width="608" height="164" fill="#2a2a3a" />
+    <line x1="520" y1="348" x2="520" y2="512" stroke="#2f2f44" stroke-width="1" />
+
+    <g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+      <text x="204" y="374" fill="#d6d6de" font-size="12" font-weight="700">Cambios</text>
+      <text x="268" y="374" fill="#8a8a9a" font-size="12">Historial</text>
+
+      <circle cx="210" cy="400" r="4" fill="#2ea043" />
+      <text x="224" y="404" fill="#d6d6de" font-size="12">apps/angular/graph/commit-row.ts</text>
+      <text x="486" y="404" fill="#8a8a9a" font-size="11" text-anchor="end">+12 −3</text>
+
+      <circle cx="210" cy="426" r="4" fill="#f85149" />
+      <text x="224" y="430" fill="#d6d6de" font-size="12">apps/go-core/internal/adapter/git/adapter.go</text>
+      <text x="486" y="430" fill="#8a8a9a" font-size="11" text-anchor="end">+48 −11</text>
+
+      <circle cx="210" cy="452" r="4" fill="#d29922" />
+      <text x="224" y="456" fill="#d6d6de" font-size="12">README.md</text>
+      <text x="486" y="456" fill="#8a8a9a" font-size="11" text-anchor="end">+2 −0</text>
+
+      <text x="204" y="486" fill="#8a8a9a" font-size="11">3 archivos · staging por archivo, hunk y línea</text>
+    </g>
+
+    <!-- diff snippet -->
+    <g fill="rgba(46,160,67,0.35)">
+      <rect x="536" y="386" width="230" height="8" rx="3" />
+      <rect x="536" y="404" width="150" height="8" rx="3" />
+    </g>
+    <g fill="rgba(248,81,73,0.35)">
+      <rect x="536" y="422" width="190" height="8" rx="3" />
+    </g>
+    <g fill="#3a3a52">
+      <rect x="536" y="440" width="210" height="8" rx="3" />
+      <rect x="536" y="458" width="120" height="8" rx="3" />
+      <rect x="536" y="476" width="180" height="8" rx="3" />
+    </g>
+
+    <text x="400" y="506" fill="#8a8a9a" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="11" text-anchor="middle">Ilustración — no es una captura real del producto</text>
+  </g>
+
+  <!-- window border drawn last so it stays crisp -->
+  <rect x="8" y="8" width="784" height="504" rx="16" fill="none" stroke="#2f2f44" stroke-width="1.5" />
+</svg>

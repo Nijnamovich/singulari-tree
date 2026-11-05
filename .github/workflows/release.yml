@@ -1,0 +1,386 @@
+name: Release
+
+# Desktop release pipeline: a tag push (v*) or a manual dispatch builds the
+# Electron app on windows-latest AND ubuntu-latest, then publishes the UNSIGNED
+# installers (NSIS Setup + portable .exe, AppImage + .deb) as a GitHub Release.
+# Kept separate from ci.yml (different filename, its own concurrency group) so a
+# release never cancels or is cancelled by CI.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)publish on Windows and Linux, e.g. v0.1.0 (leave empty to use the ref the workflow was dispatched on)'
+        required: false
+        type: string
+
+# Keyed on the version/tag, not the raw ref: a tag push and a workflow_dispatch
+# for the same tag serialize instead of racing. Never cancel an in-flight
+# release mid-upload (same reasoning as pages.yml).
+concurrency:
+  group: release-${{ github.workflow }}-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+# Least privilege: only the `release` job below escalates to contents: write.
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: Build Windows installers
+    runs-on: windows-latest
+    timeout-minutes: 45
+    # No `permissions:` on purpose: this job inherits the workflow default
+    # (contents: read) — building needs no write access.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history plus tags: the tag assertions need refs/tags/*, and a
+          # dispatch with a `tag` input must build THE TAG, not the branch.
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ inputs.tag || github.ref }}
+
+      # Fail fast, before installing or building anything: releasing a tag that
+      # does not exist (or does not match apps/electron/package.json) would
+      # publish mislabelled artifacts.
+      # User-controlled input is passed through `env:`, never interpolated into
+      # the script body.
+      # This step intentionally uses the runner image's preinstalled Node (it
+      # runs before actions/setup-node) so the tag is validated before any
+      # dependency install.
+      - name: Verify tag exists and matches the app version
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          if [ -z "$TAG" ]; then
+            echo "::error::No tag resolved. Dispatch this workflow for a tag ref, or pass the 'tag' input (e.g. v0.1.0)."
+            exit 1
+          fi
+          if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::Tag '${TAG}' does not exist in this repository. On a branch dispatch this resolves to the branch name: pass the 'tag' input (e.g. v0.1.0), or push the tag first (git tag ${TAG} && git push origin ${TAG})."
+            exit 1
+          fi
+          VERSION="$(node -p "require('./apps/electron/package.json').version")"
+          if [ "$TAG" != "v${VERSION}" ]; then
+            echo "::error::Tag '${TAG}' does not match apps/electron/package.json version ${VERSION}. Bump apps/electron/package.json before tagging (expected v${VERSION})."
+            exit 1
+          fi
+          echo "Releasing ${TAG} (apps/electron ${VERSION})"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          # go.work pins `go 1.26.0`; setup-go downloads that exact toolchain.
+          go-version-file: go.work
+          cache-dependency-path: |
+            apps/go-core/go.sum
+            libs/contracts/gen/go.sum
+
+      - name: Install dependencies (all workspaces)
+        run: npm ci
+
+      # Bash is required on windows-latest (default shell is pwsh); the repo
+      # scripts are bash with `set -euo pipefail`. This produces dist/go-core.exe.
+      - name: Build go-core
+        shell: bash
+        run: ./tools/scripts/build-go-core.sh
+
+      - name: Build Angular renderer
+        run: npm run build --workspace=@singularitree/angular
+
+      # `dist` is `npm run build && electron-builder`, so this single step builds
+      # the Electron shell AND packages the installers. The required order is:
+      # go-core -> Angular renderer -> Electron shell -> electron-builder.
+      # Do not add a separate Electron build step; it would be redundant.
+      - name: Build Electron shell and package Windows installers
+        run: npm run dist --workspace=@singularitree/electron
+
+      # The names are pinned by the top-level `nsis` / `portable` artifactName
+      # blocks in apps/electron/electron-builder.yml. They are rebuilt here from
+      # the package version so a version bump cannot silently pass.
+      - name: Assert the two Windows installers exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./apps/electron/package.json').version")"
+          EXPECTED=(
+            "apps/electron/release/SingulariTree-Setup-${VERSION}-x64.exe"
+            "apps/electron/release/SingulariTree-Portable-${VERSION}-x64.exe"
+          )
+          MISSING=0
+          for f in "${EXPECTED[@]}"; do
+            if [ -f "$f" ]; then
+              echo "Found $f"
+            else
+              echo "::error::Missing expected installer: $f"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" -ne 0 ]; then
+            echo "Contents of apps/electron/release/:"
+            ls -la apps/electron/release/ || true
+            exit 1
+          fi
+
+      - name: Upload Windows installers
+        uses: actions/upload-artifact@v4
+        with:
+          # Stable name for the whole run: `github.run_attempt` is NOT part of
+          # it, because "Re-run failed jobs" skips the already-successful build
+          # job but still increments the attempt — the release job would then
+          # look for a name that was never uploaded. `overwrite: true` replaces
+          # an artifact of the same name on a full re-run (v4 names are
+          # otherwise immutable) instead of failing.
+          name: installers-windows-${{ github.run_id }}
+          # Only the .exe files. Uploading the whole release/ dir would also
+          # carry win-unpacked/, *.blockmap and latest.yml.
+          path: apps/electron/release/*.exe
+          if-no-files-found: error
+          retention-days: 7
+          # The installers are already compressed.
+          compression-level: 0
+          overwrite: true
+
+  # Mirrors build-windows step for step: same fail-fast tag assertion, same
+  # Node/Go setup and build order, only the packaging target differs. Anything
+  # changed here must be changed there too, or the two OSes can drift apart.
+  build-linux:
+    name: Build Linux packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # No `permissions:` on purpose: inherits the workflow default
+    # (contents: read), exactly like build-windows.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Same inputs as build-windows: the tag assertions need refs/tags/*,
+          # and a dispatch with a `tag` input must build THE TAG.
+          fetch-depth: 0
+          fetch-tags: true
+          ref: ${{ inputs.tag || github.ref }}
+
+      # Identical assertion to build-windows: fail before installing anything.
+      # `shell: bash` also gives `-eo pipefail`, the repo script convention.
+      - name: Verify tag exists and matches the app version
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          if [ -z "$TAG" ]; then
+            echo "::error::No tag resolved. Dispatch this workflow for a tag ref, or pass the 'tag' input (e.g. v0.1.0)."
+            exit 1
+          fi
+          if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::Tag '${TAG}' does not exist in this repository. On a branch dispatch this resolves to the branch name: pass the 'tag' input (e.g. v0.1.0), or push the tag first (git tag ${TAG} && git push origin ${TAG})."
+            exit 1
+          fi
+          VERSION="$(node -p "require('./apps/electron/package.json').version")"
+          if [ "$TAG" != "v${VERSION}" ]; then
+            echo "::error::Tag '${TAG}' does not match apps/electron/package.json version ${VERSION}. Bump apps/electron/package.json before tagging (expected v${VERSION})."
+            exit 1
+          fi
+          echo "Releasing ${TAG} (apps/electron ${VERSION})"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          # go.work pins `go 1.26.0`; setup-go downloads that exact toolchain.
+          go-version-file: go.work
+          cache-dependency-path: |
+            apps/go-core/go.sum
+            libs/contracts/gen/go.sum
+
+      - name: Install dependencies (all workspaces)
+        run: npm ci
+
+      # Produces dist/go-core (no .exe on Linux). `shell: bash` keeps the
+      # `-eo pipefail` semantics the script itself relies on.
+      - name: Build go-core
+        shell: bash
+        run: ./tools/scripts/build-go-core.sh
+
+      - name: Build Angular renderer
+        run: npm run build --workspace=@singularitree/angular
+
+      # Same single-step packaging as Windows, and `--linux` is explicit on
+      # purpose: without it a bare `dist` falls back to host defaults (ADR-0038),
+      # so the AppImage/deb pair from the config's `linux.target` would not be
+      # guaranteed.
+      - name: Build Electron shell and package Linux packages
+        run: npm run dist --workspace=@singularitree/electron -- --linux
+
+      # Names pinned by the top-level `appImage` / `deb` artifactName blocks in
+      # apps/electron/electron-builder.yml, rebuilt from the package version.
+      # Note the per-target arch token divergence: x86_64 for AppImage, amd64
+      # for deb (getArtifactArchName()).
+      - name: Assert the two Linux packages exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./apps/electron/package.json').version")"
+          EXPECTED=(
+            "apps/electron/release/SingulariTree-AppImage-${VERSION}-x86_64.AppImage"
+            "apps/electron/release/SingulariTree-deb-${VERSION}-amd64.deb"
+          )
+          MISSING=0
+          for f in "${EXPECTED[@]}"; do
+            if [ -f "$f" ]; then
+              echo "Found $f"
+            else
+              echo "::error::Missing expected package: $f"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" -ne 0 ]; then
+            echo "Contents of apps/electron/release/:"
+            ls -la apps/electron/release/ || true
+            exit 1
+          fi
+
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@v4
+        with:
+          # Same run_id-only convention as the Windows artifact (see the comment
+          # there): no `github.run_attempt`, so a re-run of failed jobs still
+          # finds the artifact the earlier attempt uploaded.
+          name: installers-linux-${{ github.run_id }}
+          # Two formats, two globs. Uploading all of release/ would also carry
+          # linux-unpacked/, *.blockmap and latest-linux.yml.
+          path: |
+            apps/electron/release/*.AppImage
+            apps/electron/release/*.deb
+          if-no-files-found: error
+          retention-days: 7
+          # AppImage and deb are already compressed archives.
+          compression-level: 0
+          overwrite: true
+
+  release:
+    name: Publish GitHub Release
+    # Implicit success() guard: a failed build never publishes. Do not add an
+    # unconditional `if:` (no `if: true`, no cancellation override) that would
+    # replace it.
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Only this job needs write access; everything else is read-only.
+    permissions:
+      contents: write
+    steps:
+      # No checkout, no npm, no Go: this job only downloads the built assets and
+      # talks to the Releases API.
+      - name: Download Windows installers
+        uses: actions/download-artifact@v4
+        with:
+          # Exact same name as the upload step (see the comment there).
+          name: installers-windows-${{ github.run_id }}
+          # Workspace-relative on purpose: the publish step globs these paths
+          # with bash, so they must be plain forward-slash relative paths.
+          path: installers/windows
+
+      - name: Download Linux packages
+        uses: actions/download-artifact@v4
+        with:
+          name: installers-linux-${{ github.run_id }}
+          # Separate directory: both artifacts are unpacked side by side and one
+          # must not overwrite the other's files.
+          path: installers/linux
+
+      # Idempotent by design: create only when absent, always overwrite the
+      # assets, and always end up PUBLISHED (never draft).
+      # Never mark the release as a prerelease: the landing page CTA points at
+      # /releases/latest, which excludes prereleases and drafts.
+      - name: Publish release
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          # Implicit workflow token — no repository secret is used in this file.
+          # Scoped to this step only (not the job): the write token must not sit
+          # in the env of the third-party download-artifact steps above.
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Same resolution as the build jobs: dispatch input wins, otherwise the
+          # ref name (a tag on a tag push).
+          TAG="${INPUT_TAG:-${GITHUB_REF_NAME}}"
+          if [ -z "$TAG" ]; then
+            echo "::error::No tag resolved. Dispatch this workflow for a tag ref, or pass the 'tag' input (e.g. v0.1.0)."
+            exit 1
+          fi
+
+          # No checkout here, so apps/electron/package.json is unavailable: the
+          # version is derived from the tag instead. That is safe because both
+          # build jobs already asserted TAG == v<apps/electron version>.
+          if [ "${TAG#v}" = "$TAG" ]; then
+            echo "::error::Tag '${TAG}' does not start with 'v'; the packaged version cannot be derived from it."
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+
+          # Assert all four assets are present before touching the Releases API:
+          # these are the exact names pinned in electron-builder.yml (note the
+          # x86_64 / amd64 arch-token divergence on Linux).
+          EXPECTED=(
+            "installers/windows/SingulariTree-Setup-${VERSION}-x64.exe"
+            "installers/windows/SingulariTree-Portable-${VERSION}-x64.exe"
+            "installers/linux/SingulariTree-AppImage-${VERSION}-x86_64.AppImage"
+            "installers/linux/SingulariTree-deb-${VERSION}-amd64.deb"
+          )
+          MISSING=0
+          for f in "${EXPECTED[@]}"; do
+            if [ -f "$f" ]; then
+              echo "Found $f"
+            else
+              echo "::error::Missing expected release asset: $f"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" -ne 0 ]; then
+            echo "Downloaded artifact tree:"
+            ls -la installers/ installers/windows installers/linux || true
+            exit 1
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists; refreshing its assets."
+          else
+            gh release create "$TAG" --draft --verify-tag \
+              --title "SingulariTree ${TAG}" \
+              --notes "Unsigned desktop build for Windows and Linux (NSIS installer, portable executable, AppImage and deb package). No auto-update."
+          fi
+
+          # `--clobber` makes a re-run overwrite the same-named assets instead
+          # of failing.
+          gh release upload "$TAG" \
+            installers/windows/*.exe \
+            installers/linux/*.AppImage \
+            installers/linux/*.deb \
+            --clobber
+
+          # Publish even when the release was just created as a draft — and
+          # clear any prerelease flag a previous manual edit may have set, so
+          # /releases/latest always resolves.
+          gh release edit "$TAG" --draft=false --prerelease=false

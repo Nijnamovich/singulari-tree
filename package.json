@@ -1,0 +1,40 @@
+{
+  "name": "singularitree",
+  "private": true,
+  "version": "0.1.0",
+  "description": "SingulariTree monorepo — Angular + Electron + Go core + ui-kit + contracts",
+  "workspaces": [
+    "apps/angular",
+    "apps/electron",
+    "libs/contracts",
+    "libs/ui-kit"
+  ],
+  "engines": {
+    "node": "^22.22.3 || ^24.15.0 || >=26.0.0"
+  },
+  "scripts": {
+    "prestart": "node tools/scripts/verify-go-core-fresh.js",
+    "start": "concurrently --kill-others --names \"angular,electron\" \"npm run start --workspace=@singularitree/angular\" \"npm run start:wait --workspace=@singularitree/electron\"",
+    "start:electron-only": "npm run start:dev --workspace=@singularitree/electron",
+    "build": "npm run build --workspaces --if-present",
+    "gen:contracts": "npm run gen --workspace=@singularitree/contracts",
+    "postinstall": "node tools/scripts/provision-electron.js"
+  },
+  "devDependencies": {
+    "@angular/compiler": "22.2.3",
+    "@playwright/test": "^1.63.0",
+    "concurrently": "^9.2.5",
+    "wait-on": "^9.1.0"
+  },
+  "overrides": {
+    "@vitest/mocker": "4.1.12",
+    "dompurify": "3.4.17",
+    "joi": "18.2.9",
+    "vite": "8.3.3"
+  },
+  "allowScripts": {
+    "electron@42.11.9": true,
+    "esbuild@0.28.1": true,
+    "esbuild@0.28.2": true
+  }
+}

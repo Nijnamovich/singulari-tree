@@ -1,0 +1,21 @@
+version: v2
+# Contract generation (ADR-003). Run from libs/contracts:
+#   buf generate --template buf.gen.yaml
+#
+# Go output: protoc-gen-go/-grpc in import-path mode with module= prefix so files
+# land at gen/go/singularitree/v1/*.pb.go, matching option go_package
+# (github.com/SingulariTree/go-core/gen/go/singularitree/v1). The gen/ tree is its
+# own Go module (see libs/contracts/gen/go.mod) wired into go.work.
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: gen
+    opt: module=github.com/SingulariTree/go-core/gen
+  - remote: buf.build/grpc/go
+    out: gen
+    opt: module=github.com/SingulariTree/go-core/gen
+  # TS types only (no service stubs): the Electron main process talks gRPC through
+  # @grpc/proto-loader and Angular consumes these types via the @contracts alias,
+  # keeping @grpc/grpc-js out of the renderer bundle.
+  - remote: buf.build/community/stephenh-ts-proto
+    out: gen/ts
+    opt: esModuleInterop=true,outputServices=none,useExactTypes=false,onlyTypes=true

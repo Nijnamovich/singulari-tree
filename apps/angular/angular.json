@@ -1,0 +1,153 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "newProjectRoot": "projects",
+  "projects": {
+    "singularitree-angular": {
+      "projectType": "application",
+      "schematics": {
+        "@schematics/angular:component": {
+          "style": "scss",
+          "changeDetection": "OnPush"
+        }
+      },
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "st",
+      "i18n": {
+        "sourceLocale": "en-US"
+      },
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "outputPath": "dist",
+            "index": "src/index.html",
+            "browser": "src/main.ts",
+            "tsConfig": "tsconfig.json",
+            "inlineStyleLanguage": "scss",
+            "loader": {
+              ".ttf": "file"
+            },
+            "polyfills": [
+              "@angular/localize/init"
+            ],
+            "assets": [
+              {
+                "glob": "*.json",
+                "input": "src/locale",
+                "output": "locale"
+              }
+            ],
+            "styles": [
+              "src/styles.scss",
+              {
+                "input": "../../node_modules/monaco-editor/min/vs/editor/editor.main.css",
+                "bundleName": "monaco",
+                "inject": false
+              }
+            ]
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "600kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "12kB",
+                  "maximumError": "20kB"
+                }
+              ],
+              "outputHashing": "all",
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false,
+                  "removeSpecialComments": true
+                },
+                "fonts": true
+              }
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "extract-i18n": {
+          "builder": "@angular/build:extract-i18n",
+          "options": {
+            "format": "json",
+            "outputPath": "src/locale",
+            "outFile": "messages.json"
+          }
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "prebundle": {
+              "exclude": [
+                "monaco-editor"
+              ]
+            }
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "singularitree-angular:build:production"
+            },
+            "development": {
+              "buildTarget": "singularitree-angular:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "tsconfig.json",
+            "runner": "vitest",
+            "coverage": true,
+            "coverageReporters": [
+              "text",
+              "text-summary",
+              "html",
+              "lcov"
+            ],
+            "coverageInclude": [
+              "src/**/*.ts"
+            ],
+            "coverageExclude": [
+              "src/**/*.spec.ts",
+              "src/test-setup.ts",
+              "src/**/*.d.ts",
+              "src/main.ts",
+              "src/environments/**"
+            ],
+            "include": [
+              "src/**/*.spec.ts",
+              "src/**/*.test.ts",
+              "../../../libs/ui-kit/src/**/*.spec.ts",
+              "../../../libs/ui-kit/src/**/*.test.ts"
+            ],
+            "coverageThresholds": {
+              "statements": 80,
+              "branches": 80,
+              "functions": 80,
+              "lines": 80
+            }
+          }
+        }
+      }
+    }
+  },
+  "cli": {
+    "analytics": "81a07513-ee4c-4d8a-8e0b-fa71e3cb4b2f"
+  }
+}

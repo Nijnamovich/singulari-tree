@@ -1,0 +1,103 @@
+name: CI
+
+# Week-8 exit criterion: "e2e smoke pasa en 2 OS" (docs/context/git-client/roadmap-mvp.md).
+# One job, two OSes. No macOS, no signing, no auto-update.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      # Never let one OS hide a failure on the other.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          # go.work pins `go 1.26.0`; setup-go downloads that exact toolchain.
+          # If that toolchain is ever unavailable on the runner, fall back to
+          # `go-version: '1.25'` (cannot set both inputs at once).
+          go-version-file: go.work
+          cache-dependency-path: |
+            apps/go-core/go.sum
+            libs/contracts/gen/go.sum
+
+      - name: Install dependencies (all workspaces)
+        run: npm ci
+
+      # Bash is required on windows-latest (default shell is pwsh); the repo
+      # scripts are bash with `set -euo pipefail`.
+      - name: Build go-core
+        shell: bash
+        run: ./tools/scripts/build-go-core.sh
+
+      - name: Build Angular renderer
+        run: npm run build --workspace=@singularitree/angular
+
+      - name: Build Electron shell
+        run: npm run build --workspace=@singularitree/electron
+
+      - name: Unit tests (Electron)
+        run: npm test --workspace=@singularitree/electron
+
+      - name: Unit tests (Angular)
+        run: npm test --workspace=@singularitree/angular
+
+      - name: Go vet
+        working-directory: apps/go-core
+        run: go vet ./...
+
+      - name: Go tests
+        working-directory: apps/go-core
+        run: go test ./... -count=1
+
+      # Electron is not headless: ubuntu-latest has no X server, so wrap in
+      # xvfb-run. windows-latest has an interactive desktop and runs natively.
+      # E2E_REQUIRE_PREREQS=1 turns a missing-artifact skip into a hard failure
+      # so a broken build can never look green.
+      - name: Electron e2e smoke (Playwright)
+        working-directory: apps/electron
+        shell: bash
+        env:
+          E2E_REQUIRE_PREREQS: '1'
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ] && command -v xvfb-run >/dev/null 2>&1; then
+            xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npx playwright test
+          else
+            npx playwright test
+          fi
+
+      - name: Upload e2e results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-${{ matrix.os }}
+          path: apps/electron/e2e-results/
+          if-no-files-found: ignore
+          retention-days: 7

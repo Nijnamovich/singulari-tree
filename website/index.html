@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="theme-color" content="#1e1e2e" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)" />
+  <title>SingulariTree — cliente Git de escritorio multiplataforma</title>
+  <meta name="description" content="Cliente de Git de escritorio multiplataforma con núcleo Go headless, grafo de commits virtualizado y staging por archivo, hunk y línea. En desarrollo activo." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="SingulariTree — cliente Git de escritorio multiplataforma" />
+  <meta property="og:description" content="Cliente de Git de escritorio multiplataforma con núcleo Go headless, grafo de commits virtualizado y staging granular." />
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+
+  <header class="site-header" id="top">
+    <div class="wrap header-inner">
+      <a class="brand" href="#top">
+        <img class="brand__mark" src="./assets/favicon.svg" alt="" width="28" height="28" />
+        <span class="brand__name">SingulariTree</span>
+      </a>
+      <nav class="site-nav" aria-label="Navegación principal">
+        <a href="#features">Características</a>
+        <a href="#descargas">Descargas</a>
+        <a class="icon-link" href="https://github.com/Nijnamovich/singulari-tree" target="_blank" rel="noopener" aria-label="Repositorio de SingulariTree en GitHub (se abre en una pestaña nueva)">
+          <svg width="20" height="20" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+          </svg>
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap hero__grid">
+        <div class="hero__copy">
+          <p class="eyebrow">Cliente Git de escritorio · Windows y Linux</p>
+          <h1 id="hero-title">SingulariTree</h1>
+          <p class="hero__tagline">Tu repositorio, en un solo lugar.</p>
+          <p class="hero__lead">Un cliente de Git de escritorio multiplataforma con núcleo Go headless, arquitectura hexagonal y un grafo de commits que se mantiene ágil incluso en repositorios grandes.</p>
+
+          <p class="status-badge">
+            <span class="status-badge__dot" aria-hidden="true"></span>
+            En desarrollo activo — la primera versión pública todavía no se ha publicado.
+          </p>
+
+          <div class="cta">
+            <a class="btn btn--primary" href="https://github.com/Nijnamovich/singulari-tree/releases/latest" target="_blank" rel="noopener">
+              <svg class="btn__icon" width="20" height="20" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <g fill="currentColor">
+                  <rect x="0" y="0" width="7" height="7" rx="1" />
+                  <rect x="9" y="0" width="7" height="7" rx="1" />
+                  <rect x="0" y="9" width="7" height="7" rx="1" />
+                  <rect x="9" y="9" width="7" height="7" rx="1" />
+                </g>
+              </svg>
+              Descargar para Windows
+            </a>
+            <p class="cta__meta">Windows 10/11 de 64 bits (requisito aproximado).</p>
+          </div>
+
+          <p class="smartscreen">
+            <strong>Aviso sobre SmartScreen:</strong> la compilación para Windows no está firmada digitalmente, así que Windows puede mostrar una advertencia. Para continuar, elige <em>Más información</em> y después <em>Ejecutar de todas formas</em>.
+          </p>
+          <p class="unsigned-note">Las compilaciones de Linux tampoco están firmadas: son versiones preliminares.</p>
+        </div>
+
+        <figure class="hero__figure">
+          <img src="./assets/hero-app.svg" width="800" height="520" alt="Ilustración estilizada de la ventana de SingulariTree: barra lateral de ramas, grafo de commits con varias ramas y un panel inferior con los archivos modificados y un fragmento de diff." />
+          <figcaption>Ilustración de la interfaz; no es una captura real del producto.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="section" aria-labelledby="features-title">
+      <div class="wrap">
+        <h2 id="features-title">Características</h2>
+        <p class="section__lead">Todas las capacidades siguientes están verificadas en el repositorio del proyecto. SingulariTree sigue en desarrollo: lo que ves es hacia dónde va el producto.</p>
+
+        <ul class="cards">
+          <li class="card">
+            <h3>Multiplataforma</h3>
+            <p>Windows (instalador NSIS y versión portable) y Linux (AppImage y deb).</p>
+          </li>
+          <li class="card">
+            <h3>Núcleo Go headless</h3>
+            <p>Arquitectura hexagonal: el contacto con Git ocurre únicamente dentro del núcleo Go, que puede ejecutarse sin interfaz con <code>--headless</code> (señal <code>GO_CORE_READY</code>).</p>
+          </li>
+          <li class="card">
+            <h3>Transporte gRPC + HTTP</h3>
+            <p>Comunicación por gRPC con fallback a HTTP, sobre un contrato proto-first (paquete <code>singularitree.v1</code>) generado con <code>buf generate</code>.</p>
+          </li>
+          <li class="card">
+            <h3>El grafo y los archivos son la verdad</h3>
+            <p>SQLite guarda solo una caché de metadatos y estado de interfaz: <strong>nunca</strong> almacena objetos Git.</p>
+          </li>
+          <li class="card">
+            <h3>Grafo virtualizado</h3>
+            <p>Grafo de commits virtualizado con filtro, panel de detalle de cada commit y una fila destacada para los cambios en curso (WIP).</p>
+          </li>
+          <li class="card">
+            <h3>Staging granular</h3>
+            <p>Prepara cambios por archivo, por hunk y por línea, revisa los diffs en un visor Monaco, y usa reset soft/mixed/hard, stash apply/pop/drop y merge con los conflictos a la vista.</p>
+          </li>
+          <li class="card">
+            <h3>Multi-repositorio</h3>
+            <p>Espacios de trabajo y pestañas para varios repositorios, búsqueda de commits entre repos, presets de git-flow y enlaces profundos <code>singularitree://</code>.</p>
+          </li>
+          <li class="card">
+            <h3>Watcher en tiempo real</h3>
+            <p>Un watcher real basado en <code>fsnotify</code> refleja de inmediato los cambios del árbol de trabajo.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Tech strip -->
+    <section class="tech" aria-labelledby="tech-title">
+      <div class="wrap tech__inner">
+        <h2 class="tech__title" id="tech-title">Tecnología</h2>
+        <ul class="tech__list">
+          <li>Angular 22</li>
+          <li>Electron 41</li>
+          <li>Go 1.25</li>
+          <li>Arquitectura hexagonal</li>
+          <li>Contract-first (buf)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Downloads -->
+    <section id="descargas" class="section" aria-labelledby="descargas-title">
+      <div class="wrap">
+        <h2 id="descargas-title">Descargas</h2>
+        <p class="section__lead">Todas las compilaciones están sin firmar y son versiones preliminares en desarrollo. Se publicarán en GitHub Releases. La primera versión pública todavía no se ha publicado: los enlaces llevan al listado de GitHub Releases.</p>
+
+        <ul class="downloads">
+          <li class="download">
+            <div class="download__info">
+              <span class="download__os">Windows</span>
+              <span class="download__formats">Instalador NSIS · versión portable</span>
+            </div>
+            <a class="btn btn--secondary" href="https://github.com/Nijnamovich/singulari-tree/releases/latest" target="_blank" rel="noopener">Descargar para Windows</a>
+          </li>
+          <li class="download">
+            <div class="download__info">
+              <span class="download__os">Linux</span>
+              <span class="download__formats">AppImage · deb</span>
+            </div>
+            <a class="btn btn--secondary" href="https://github.com/Nijnamovich/singulari-tree/releases/latest" target="_blank" rel="noopener">Descargar para Linux</a>
+          </li>
+        </ul>
+
+        <p class="downloads__all">
+          <a class="text-link" href="https://github.com/Nijnamovich/singulari-tree/releases" target="_blank" rel="noopener">Ver todas las versiones en GitHub</a>
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer__inner">
+      <p class="footer__brand">SingulariTree — cliente Git de escritorio en desarrollo</p>
+      <p>Todas las compilaciones son versiones preliminares sin firmar.</p>
+      <p>
+        <a href="https://github.com/Nijnamovich/singulari-tree" target="_blank" rel="noopener">github.com/Nijnamovich/singulari-tree</a>
+      </p>
+    </div>
+  </footer>
+</body>
+</html>

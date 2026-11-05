@@ -1,0 +1,284 @@
+<div class="st-shell">
+  <st-top-bar
+    [tabs]="topBarTabs()"
+    [activeTab]="workspaces.activeTabId()"
+    [hasActiveRepo]="repoState.activeId() !== null"
+    [canSync]="workspaces.activeTabId() !== null"
+    [pullPending]="repoState.currentBranchBehind()"
+    [drawerPinned]="drawerPinned()"
+    (tabSelected)="onTabSelected($event)"
+    (tabClosed)="onTabClosed($event)"
+    (addRequested)="onTabAdd()"
+    (pullRequested)="remoteOps.openDialog('pull')"
+    (pushRequested)="remoteOps.openDialog('push')"
+    (fetchRequested)="remoteOps.openDialog('fetch')"
+    (syncRequested)="onSync()"
+    (cloneFromClipboardRequested)="onCloneFromClipboard()"
+    (copyRepoUrlRequested)="onCopyRepoUrl()"
+    (drawerToggled)="onDrawerToggled()"
+  />
+
+  <!-- Prominent, dismissible checkout-failure banner for the active repo.
+       Suppressed while the conflict modal owns the error, to avoid duplicates. -->
+  <st-checkout-error-banner
+    [error]="checkoutPrompt() ? null : repoState.checkoutError()"
+    (dismiss)="repoState.dismissCheckoutError()"
+  />
+
+  <!-- Merge / cherry-pick / revert conflicts are surfaced, not resolved (ADR-028, ADR-0042). -->
+  <st-merge-conflict-banner
+    [conflict]="repoState.conflict()"
+    [operation]="repoState.conflict()?.operation ?? 'merge'"
+    (dismiss)="repoState.dismissConflict()"
+  />
+
+  <!-- BODY: rail | workspace | drawer -->
+  <div class="st-body">
+    <st-nav-rail
+      [collapsed]="railCollapsed()"
+      [activeWorkspace]="activeWorkspace()"
+      [repoName]="repoState.activeRepo()?.name ?? ''"
+      [repoPath]="repoState.activeRepo()?.fsPath ?? ''"
+      [branches]="repoState.branches()"
+      [currentBranch]="repoState.currentBranch()"
+      [currentBranchBehind]="repoState.currentBranchBehind()"
+      [lensRef]="lens.ref() ?? ''"
+      [lensKind]="lens.kind() ?? ''"
+      [remoteBranches]="repoState.remoteBranches()"
+      [tags]="repoState.tags()"
+      [remotes]="repoState.remotes()"
+      [stashes]="repoState.stashes()"
+      [stashesLoading]="repoState.stashesLoading()"
+      [stashesError]="repoState.stashesError()"
+      [stashOpRunning]="repoState.stashOpRunning()"
+      [loading]="repoState.refsLoading()"
+      [offline]="repoState.refsOffline()"
+      [error]="repoState.refsError()"
+      [changeCount]="0"
+      (collapseToggle)="toggleRail()"
+      (workspaceSelected)="onWorkspaceSelected($event)"
+      (branchSelected)="onBranchSelected($event)"
+      (remoteBranchSelected)="onRemoteBranchSelected($event)"
+      (lensToggled)="onLensToggled($event)"
+      (newBranchRequested)="onNewBranchRequested()"
+      (newTagRequested)="onNewTagRequested()"
+      (branchRenameRequested)="onBranchRenameRequested($event)"
+      (branchDeleteRequested)="onBranchDeleteRequested($event)"
+      (branchMergeRequested)="onBranchMergeRequested($event)"
+      (tagDeleteRequested)="onTagDeleteRequested($event)"
+      (stashPushRequested)="onStashPushRequested()"
+      (stashApplyRequested)="onStashApplyRequested($event)"
+      (stashPopRequested)="onStashPopRequested($event)"
+      (stashDropRequested)="onStashDropRequested($event)"
+      (gitFlowRequested)="onGitFlowRequested()"
+    />
+
+    <!-- CENTER: route-driven. Route pages that need a detail pane (History,
+         File status) mount their own `st-workspace-split`; the shell only owns
+         the routed host. -->
+    <div class="st-router-host">
+      <router-outlet />
+    </div>
+
+    <!-- REPO DRAWER (pinned inline or floating popover, plan §4.7) -->
+    <st-repo-drawer
+      [repos]="repoCards()"
+      [pinned]="drawerPinned()"
+      [open]="drawerOpen()"
+      [selectedId]="repoState.activeId()"
+      [removingId]="repoState.removingId()"
+      [loading]="repoState.reposLoading()"
+      [offline]="repoState.reposOffline()"
+      [error]="repoState.reposError()"
+      (pinToggled)="onDrawerToggled()"
+      (closed)="onDrawerClosed()"
+      (repoSelected)="onRepoSelected($event)"
+      (removeRequested)="onRemoveRepository($event)"
+      (addRequested)="onAddRepository()"
+    />
+  </div>
+  <!-- /st-body -->
+
+  <!-- STATUS BAR: context | sync/online | live region + compact fetch status -->
+  <st-status-bar
+    [repo]="repoState.activeRepo()?.name ?? ''"
+    [branch]="repoState.currentBranch()"
+    [shortHash]="''"
+    [ahead]="0"
+    [behind]="repoState.currentBranchBehind()"
+    [offline]="remoteOps.offline()"
+  >
+    <!-- Renderer-orchestrated active-tab fetch (ADR-024). -->
+    <st-fetch-all-status
+      [open]="fetchOpen()"
+      [repoName]="fetchRepoName()"
+      [status]="remoteOps.fetchStatus()"
+      [error]="remoteOps.fetchError()"
+      (dismissed)="remoteOps.clearFetch()"
+    />
+  </st-status-bar>
+
+  <st-pull-dialog
+    [open]="remoteOps.activeDialog() === 'pull'"
+    [repoName]="repoState.activeRepo()?.name ?? ''"
+    [remotes]="remoteOps.remoteOptions()"
+    [remoteBranchesByRemote]="remoteOps.remoteBranchesByRemote()"
+    [localBranchNames]="remoteOps.localBranchNames()"
+    [currentBranch]="remoteOps.currentBranch()"
+    [loading]="remoteOps.refsLoading()"
+    [running]="remoteOps.running()"
+    [progress]="remoteOps.progress()"
+    [error]="remoteOps.opError() ?? remoteOps.refsError()"
+    [offline]="remoteOps.offline()"
+    (closed)="remoteOps.closeDialog()"
+    (refreshRequested)="remoteOps.loadRefs()"
+    (submitted)="remoteOps.runPull($event)"
+  />
+  <st-push-dialog
+    [open]="remoteOps.activeDialog() === 'push'"
+    [repoName]="repoState.activeRepo()?.name ?? ''"
+    [remotes]="remoteOps.remoteOptions()"
+    [rows]="remoteOps.pushRows()"
+    [remoteBranchesByRemote]="remoteOps.remoteBranchesByRemote()"
+    [loading]="remoteOps.refsLoading()"
+    [running]="remoteOps.running()"
+    [progress]="remoteOps.progress()"
+    [error]="remoteOps.opError() ?? remoteOps.refsError()"
+    [offline]="remoteOps.offline()"
+    (closed)="remoteOps.closeDialog()"
+    (refreshRequested)="remoteOps.loadRefs()"
+    (submitted)="remoteOps.runPush($event)"
+  />
+  <st-fetch-dialog
+    [open]="remoteOps.activeDialog() === 'fetch'"
+    [remotes]="remoteOps.remoteOptions()"
+    [loading]="remoteOps.refsLoading()"
+    [running]="remoteOps.running()"
+    [progress]="remoteOps.progress()"
+    [error]="remoteOps.opError() ?? remoteOps.refsError()"
+    [offline]="remoteOps.offline()"
+    (closed)="remoteOps.closeDialog()"
+    (submitted)="remoteOps.runFetch($event)"
+  />
+
+  <!-- Branch switch: pre-checkout confirmation on every click, then the
+       dirty/untracked escalation when a checkout is blocked. -->
+  <st-switch-branch-confirm-dialog
+    [open]="checkoutPrompt() !== null"
+    [branchName]="checkoutPrompt()?.name ?? ''"
+    [mode]="checkoutPrompt()?.mode ?? 'dirty'"
+    (confirmed)="onConfirmed($event)"
+    (forceCheckout)="onForceCheckout()"
+    (saveChanges)="onSaveChanges()"
+    (cancel)="onCancelCheckoutPrompt()"
+  />
+
+  <!-- Ref mutations (ADR-028): branch CRUD, tag CRUD and merge. -->
+  <st-branch-create-dialog
+    [open]="branchDialog() !== null"
+    [defaultStartPoint]="branchDialog()?.startPoint ?? 'HEAD'"
+    [running]="repoState.refOpRunning()"
+    [error]="repoState.refOpError()"
+    (submitted)="onCreateBranchSubmitted($event)"
+    (cancelled)="onBranchDialogCancelled()"
+  />
+  <st-ref-rename-dialog
+    [open]="renameDialog() !== null"
+    [currentName]="renameDialog() ?? ''"
+    [running]="repoState.refOpRunning()"
+    [error]="repoState.refOpError()"
+    (submitted)="onRenameSubmitted($event)"
+    (cancelled)="onRenameCancelled()"
+  />
+  <st-ref-delete-confirm-dialog
+    [open]="deleteDialog() !== null"
+    [kind]="deleteDialog()?.kind ?? 'branch'"
+    [name]="deleteDialog()?.name ?? ''"
+    [showForce]="deleteDialog()?.kind === 'branch'"
+    [running]="repoState.refOpRunning()"
+    [error]="repoState.refOpError()"
+    (confirmed)="onDeleteConfirmed($event)"
+    (cancelled)="onDeleteCancelled()"
+  />
+  <st-tag-create-dialog
+    [open]="tagDialog() !== null"
+    [defaultTarget]="tagDialog()?.target ?? 'HEAD'"
+    [running]="repoState.refOpRunning()"
+    [error]="repoState.refOpError()"
+    (submitted)="onTagCreateSubmitted($event)"
+    (cancelled)="onTagDialogCancelled()"
+  />
+  <st-merge-dialog
+    [open]="mergeDialog() !== null"
+    [branches]="repoState.branches()"
+    [currentBranch]="repoState.currentBranch()"
+    [defaultRef]="mergeDialog() ?? ''"
+    [running]="repoState.refOpRunning()"
+    [error]="repoState.refOpError()"
+    [conflict]="repoState.mergeConflict()"
+    (submitted)="onMergeSubmitted($event)"
+    (cancelled)="onMergeCancelled()"
+  />
+
+  <!-- Cherry-pick a commit onto the current branch (ADR-0042). The dialog is
+       dumb; `RepoState` owns the preview resolution and the mutation, and a
+       conflict keeps it open with a warn row. -->
+  <st-cherry-pick-dialog
+    [open]="repoState.cherryPickDialog() !== null"
+    [currentBranch]="repoState.currentBranch()"
+    [branches]="repoState.branches()"
+    [remoteBranches]="repoState.remoteBranches()"
+    [tags]="repoState.tags()"
+    [defaultSource]="repoState.cherryPickDialog()?.source ?? ''"
+    [running]="repoState.refOpRunning()"
+    [error]="repoState.refOpError()"
+    [conflict]="repoState.conflict()"
+    [preview]="repoState.cherryPreview()"
+    [previewLoading]="repoState.cherryPreviewLoading()"
+    [previewError]="repoState.cherryPreviewError()"
+    (submitted)="onCherryPickSubmitted($event)"
+    (sourceChange)="onCherrySourceChange($event)"
+    (cancelled)="onCherryPickCancelled()"
+  />
+
+  <!-- Stash apply/pop/drop + stash current changes (ADR-028). -->
+  <st-stash-push-dialog
+    [open]="stashPushDialog()"
+    [running]="repoState.stashRunning()"
+    [error]="repoState.stashOpError()"
+    (submitted)="onStashPushSubmitted($event)"
+    (cancelled)="onStashPushCancelled()"
+  />
+  <st-stash-drop-confirm-dialog
+    [open]="stashDropDialog() !== null"
+    [index]="stashDropDialog()?.index ?? 0"
+    [message]="stashDropDialog()?.message ?? ''"
+    [running]="repoState.stashOpRunning()"
+    [error]="repoState.stashOpError()"
+    (confirmed)="onStashDropConfirmed()"
+    (cancelled)="onStashDropCancelled()"
+  />
+
+  <!-- git-flow presets: start/finish + config (ADR-027). -->
+  <st-git-flow-dialog
+    [open]="gitFlowDialog() !== null"
+    [initialMode]="gitFlowDialog() ?? 'start'"
+    [config]="repoState.gitFlowConfig()"
+    [defaultBase]="repoState.currentBranch()"
+    [running]="repoState.gitFlowRunning()"
+    [error]="repoState.gitFlowError() ?? repoState.gitFlowConfigError()"
+    [result]="repoState.gitFlowResult()"
+    (startSubmitted)="onGitFlowStartSubmitted($event)"
+    (finishSubmitted)="onGitFlowFinishSubmitted($event)"
+    (configSubmitted)="onGitFlowConfigSubmitted($event)"
+    (cancelled)="onGitFlowCancelled()"
+  />
+
+  <!-- Clone dialog stub: prefill only, cloning is V1.4 (ADR-025). -->
+  <st-clone-dialog
+    [open]="cloneDialog() !== null"
+    [url]="cloneDialog()?.url ?? ''"
+    [error]="cloneDialog()?.error ?? null"
+    (cancelled)="onCloneCancelled()"
+  />
+</div>

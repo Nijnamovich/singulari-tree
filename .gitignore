@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+dist/
+apps/angular/.angular
+tmp/
+
+# Build outputs
+apps/go-core/go-core
+apps/go-core/*.exe
+dist/
+coverage/
+bin/
+
+# SQLite per-user databases (runtime data, not committed)
+data/sqlite/*.db
+data/sqlite/*.db-wal
+data/sqlite/*.db-shm
+data/sqlite/*.sqlite
+data/sqlite/*.sqlite-wal
+data/sqlite/*.sqlite-shm
+
+# Generated Go/TS are kept committed via .gitkeep placeholders
+# Do NOT ignore libs/contracts/gen/go/*.pb.go or libs/contracts/gen/ts/*.ts
+# Keep them versioned; buf generate will overwrite.
+
+# Container / compose local data (bind-mounted gRPC socket dir + local DBs)
+# Anchored to the repo root so it does NOT swallow source dirs like
+# apps/electron/src/ipc/.
+/ipc/
+.data/
+
+# Env and secrets
+.env
+.env.*
+*.token
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.opencode/
+apps/angular/.opencode/
+apps/electron/.opencode/
+apps/go-core/.opencode/
+
+# Playwright e2e artifacts (reports, traces, screenshots, videos)
+apps/electron/e2e-results/
+
+# electron-builder packaged output (installers + unpacked dirs)
+apps/electron/release/

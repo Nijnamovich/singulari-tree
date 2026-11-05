@@ -1,0 +1,39 @@
+{
+  "name": "@singularitree/angular",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SingulariTree Angular 22 renderer — zoneless, standalone, signals",
+  "type": "module",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve",
+    "build": "ng build",
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test --no-watch",
+    "test:watch": "ng test"
+  },
+  "dependencies": {
+    "@angular/cdk": "^22.2.4",
+    "@angular/common": "^22.2.3",
+    "@angular/compiler": "^22.2.3",
+    "@angular/core": "^22.2.3",
+    "@angular/forms": "^22.2.3",
+    "@angular/localize": "^22.2.3",
+    "@angular/material": "^22.2.4",
+    "@angular/platform-browser": "^22.2.3",
+    "@angular/router": "^22.2.3",
+    "monaco-editor": "^0.57.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^22.2.3",
+    "@angular/cli": "^22.2.3",
+    "@angular/compiler-cli": "^22.2.3",
+    "@types/node": "^22.10.2",
+    "@vitest/coverage-v8": "^4.1.11",
+    "jsdom": "^30.1.1",
+    "typescript": "~6.0.3",
+    "vitest": "^4.0.16"
+  }
+}

@@ -1,0 +1,94 @@
+# SingulariTree — Tag index
+
+<!-- BEGIN GENERATED: tags -->
+<!-- snapshot: 2026-10-25 -->
+## Generated tag index
+
+- **adr** — adr-0014-docs-corpus-layout, adr-0015-docs-validator-generated-index, adr-0016-lane-state-and-graph-dod, adr-0017-docs-language-en, adr-0018-renderer-i18n-locale-switch, adr-0019-adr-translation-authorization, adr-0020-diff-per-file-and-hunk-staging, adr-0021-reset-modes, adr-0022-graph-context-menu-shell, adr-0023-commit-change-size-gauge, adr-0029-file-status-screen, adr-0030-history-screen-is-compare-free, adr-0031-repository-relocation-and-missing-folder-recovery, adr-0032-history-commit-file-list-tooltip, adr-0033-commit-details-files-expandable-panel, adr-0034-retire-cross-repo-commit-search, adr-0035-commit-details-redesign-and-inline-hunk-actions, adr-0036-per-tab-fetch, adr-0037-windows-release-and-distribution, adr-0038-drop-macos-support-windows-and-linux-only, adr-0039-linux-release-and-distribution, adr-0040-per-repo-session-graph-selection-lock, adr-0041-forced-dependency-floors-and-electron-42, adr-0042-cherry-pick-and-branch-lens, adr-024-multi-repo-workspaces, adr-025-deep-links-and-clipboard-clone, adr-026-cross-repo-commit-search, adr-027-git-flow-presets, adr-028-advanced-git-rpcs, adr-index
+- **bootstrap** — bootstrap-protocol
+- **branch** — adr-028-advanced-git-rpcs
+- **cache** — adr-0023-commit-change-size-gauge, adr-026-cross-repo-commit-search
+- **cherry-pick** — adr-0042-cherry-pick-and-branch-lens
+- **ci** — adr-0037-windows-release-and-distribution, adr-0039-linux-release-and-distribution, repository-configuration
+- **clipboard** — adr-025-deep-links-and-clipboard-clone
+- **compare** — adr-0030-history-screen-is-compare-free
+- **context-menu** — adr-0022-graph-context-menu-shell
+- **contract** — documentation-system, new-note-protocol
+- **contracts** — adr-0020-diff-per-file-and-hunk-staging, adr-0031-repository-relocation-and-missing-folder-recovery, adr-0034-retire-cross-repo-commit-search, adr-0042-cherry-pick-and-branch-lens, adr-028-advanced-git-rpcs
+- **core** — adr-0021-reset-modes, adr-0023-commit-change-size-gauge, adr-0031-repository-relocation-and-missing-folder-recovery, adr-0034-retire-cross-repo-commit-search, adr-0042-cherry-pick-and-branch-lens, adr-026-cross-repo-commit-search, adr-027-git-flow-presets, adr-028-advanced-git-rpcs
+- **debt** — accepted-debt
+- **deep-link** — adr-025-deep-links-and-clipboard-clone
+- **dependencies** — adr-0041-forced-dependency-floors-and-electron-42
+- **design-system** — design-system
+- **desktop-shell** — adr-0034-retire-cross-repo-commit-search, adr-025-deep-links-and-clipboard-clone
+- **destructive** — adr-0021-reset-modes
+- **diff** — adr-0020-diff-per-file-and-hunk-staging, adr-0029-file-status-screen, adr-0030-history-screen-is-compare-free, adr-0032-history-commit-file-list-tooltip, adr-0033-commit-details-files-expandable-panel, adr-0035-commit-details-redesign-and-inline-hunk-actions
+- **distribution** — adr-0037-windows-release-and-distribution, adr-0038-drop-macos-support-windows-and-linux-only, adr-0039-linux-release-and-distribution
+- **documentation** — accepted-debt, adr-0014-docs-corpus-layout, adr-0015-docs-validator-generated-index, adr-0017-docs-language-en, adr-0019-adr-translation-authorization, documentation-system
+- **dod** — adr-0016-lane-state-and-graph-dod
+- **electron** — adr-0037-windows-release-and-distribution, adr-0038-drop-macos-support-windows-and-linux-only, adr-0039-linux-release-and-distribution, adr-0041-forced-dependency-floors-and-electron-42
+- **entry-point** — project
+- **errors** — adr-0031-repository-relocation-and-missing-folder-recovery
+- **feature-gap** — feature-gap-analysis
+- **generality** — contracts-slice, core-slice, desktop-shell-slice, docs-slice, renderer-slice, tooling-slice
+- **generated** — adr-0015-docs-validator-generated-index
+- **git-client** — feature-gap-analysis, renderer-redesign-plan
+- **git-flow** — adr-027-git-flow-presets
+- **github-actions** — adr-0037-windows-release-and-distribution, adr-0039-linux-release-and-distribution, repository-configuration
+- **graph** — adr-0016-lane-state-and-graph-dod, adr-0022-graph-context-menu-shell, adr-0029-file-status-screen, adr-0030-history-screen-is-compare-free, adr-0032-history-commit-file-list-tooltip, adr-0033-commit-details-files-expandable-panel, adr-0035-commit-details-redesign-and-inline-hunk-actions, adr-0040-per-repo-session-graph-selection-lock, adr-0042-cherry-pick-and-branch-lens
+- **hub** — adr-index, slices-index
+- **i18n** — adr-0018-renderer-i18n-locale-switch
+- **index** — adr-index, slices-index
+- **lanes** — adr-0016-lane-state-and-graph-dod
+- **language** — adr-0017-docs-language-en
+- **layout** — adr-0014-docs-corpus-layout
+- **legacy** — accepted-debt
+- **lens** — adr-0042-cherry-pick-and-branch-lens
+- **lifecycle** — adr-0019-adr-translation-authorization
+- **linux** — adr-0039-linux-release-and-distribution
+- **m2** — adr-0020-diff-per-file-and-hunk-staging, adr-0021-reset-modes, adr-0022-graph-context-menu-shell, adr-0023-commit-change-size-gauge
+- **m3** — adr-0029-file-status-screen, adr-0034-retire-cross-repo-commit-search, adr-0036-per-tab-fetch, adr-024-multi-repo-workspaces, adr-025-deep-links-and-clipboard-clone, adr-026-cross-repo-commit-search, adr-027-git-flow-presets, adr-028-advanced-git-rpcs
+- **merge** — adr-028-advanced-git-rpcs
+- **multi-repo** — adr-0036-per-tab-fetch, adr-0040-per-repo-session-graph-selection-lock, adr-024-multi-repo-workspaces
+- **npm** — adr-0041-forced-dependency-floors-and-electron-42
+- **onrails** — adr-0014-docs-corpus-layout, adr-0016-lane-state-and-graph-dod, documentation-system
+- **packaging** — adr-0038-drop-macos-support-windows-and-linux-only
+- **permissions** — repository-configuration
+- **plan** — renderer-redesign-plan
+- **platforms** — adr-0038-drop-macos-support-windows-and-linux-only
+- **project** — project
+- **protocol** — bootstrap-protocol, docs-review-protocol, new-note-protocol
+- **ratchet** — accepted-debt
+- **redesign** — renderer-redesign-plan
+- **release** — adr-0037-windows-release-and-distribution, adr-0038-drop-macos-support-windows-and-linux-only, adr-0039-linux-release-and-distribution, repository-configuration
+- **relocation** — adr-0031-repository-relocation-and-missing-folder-recovery
+- **remote** — adr-0036-per-tab-fetch
+- **renderer** — adr-0018-renderer-i18n-locale-switch, adr-0022-graph-context-menu-shell, adr-0029-file-status-screen, adr-0030-history-screen-is-compare-free, adr-0031-repository-relocation-and-missing-folder-recovery, adr-0032-history-commit-file-list-tooltip, adr-0033-commit-details-files-expandable-panel, adr-0034-retire-cross-repo-commit-search, adr-0035-commit-details-redesign-and-inline-hunk-actions, adr-0036-per-tab-fetch, adr-0040-per-repo-session-graph-selection-lock, adr-0042-cherry-pick-and-branch-lens, adr-024-multi-repo-workspaces, design-system, renderer-redesign-plan
+- **repositories** — adr-0031-repository-relocation-and-missing-folder-recovery
+- **reset** — adr-0021-reset-modes
+- **revert** — adr-0042-cherry-pick-and-branch-lens
+- **review** — docs-review-protocol
+- **roadmap** — feature-gap-analysis
+- **search** — adr-0034-retire-cross-repo-commit-search, adr-026-cross-repo-commit-search
+- **security** — repository-configuration
+- **session** — adr-0040-per-repo-session-graph-selection-lock
+- **singularitree** — project
+- **slice** — contracts-slice, core-slice, desktop-shell-slice, docs-slice, renderer-slice, tooling-slice
+- **slices** — slices-index
+- **staging** — adr-0020-diff-per-file-and-hunk-staging, adr-0035-commit-details-redesign-and-inline-hunk-actions
+- **stash** — adr-028-advanced-git-rpcs
+- **stats** — adr-0023-commit-change-size-gauge
+- **status** — adr-0029-file-status-screen, adr-0030-history-screen-is-compare-free, adr-0032-history-commit-file-list-tooltip, adr-0033-commit-details-files-expandable-panel, adr-0035-commit-details-redesign-and-inline-hunk-actions
+- **structure** — documentation-system
+- **supply-chain** — adr-0041-forced-dependency-floors-and-electron-42
+- **tag** — adr-028-advanced-git-rpcs
+- **theming** — design-system
+- **tokens** — design-system
+- **tooling** — adr-0041-forced-dependency-floors-and-electron-42
+- **ui-kit** — adr-0035-commit-details-redesign-and-inline-hunk-actions, design-system
+- **validation** — docs-review-protocol
+- **validator** — adr-0015-docs-validator-generated-index
+- **windows** — adr-0037-windows-release-and-distribution
+- **workflow** — adr-027-git-flow-presets
+- **workspaces** — adr-0036-per-tab-fetch, adr-0040-per-repo-session-graph-selection-lock, adr-024-multi-repo-workspaces
+<!-- END GENERATED: tags -->

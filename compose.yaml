@@ -1,0 +1,36 @@
+name: singularitree
+
+# Containerized headless Go core.
+#
+# Transport stays loopback-only / unix socket (ADR-004, ipc-strategy §2.7):
+#   - gRPC unix socket is shared across the container boundary via the bind
+#     mount ./ipc -> /run/singularitree (host-visible, mode 0600, host-owned).
+#   - the HTTP fallback binds 127.0.0.1 inside the container only; reach it
+#     with `docker compose exec core wget -qO- ...`.
+# There is intentionally NO `ports:` section.
+
+services:
+  core:
+    build:
+      context: .
+      target: runtime
+    image: singularitree-core:local
+    command:
+      - --headless
+      - --grpc-addr=unix:///run/singularitree/go-core.sock
+      - --http-fallback-addr=127.0.0.1:0
+      - --db=/data/cache.db
+    environment:
+      CORE_UID: "${CORE_UID:-1000}"
+      CORE_GID: "${CORE_GID:-1000}"
+      SINGULARITREE_LOG_LEVEL: "${SINGULARITREE_LOG_LEVEL:-info}"
+    volumes:
+      # Host-visible gRPC unix socket (bind mount, cross-boundary access).
+      - ./ipc:/run/singularitree
+      # SQLite DB + WAL (-wal/-shm) persisted across restarts.
+      - core-data:/data
+    # The core hard-stops 5s after SIGTERM; give it room to shut down gracefully.
+    stop_grace_period: 10s
+
+volumes:
+  core-data:

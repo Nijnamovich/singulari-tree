@@ -1,0 +1,19 @@
+{
+  "name": "@singularitree/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SingulariTree cross-process Protobuf contracts (singularitree.v1 / gitclient.v1)",
+  "type": "module",
+  "exports": {
+    "./*": "./gen/ts/*.ts"
+  },
+  "files": [
+    "proto",
+    "gen"
+  ],
+  "scripts": {
+    "gen": "buf generate --template buf.gen.yaml",
+    "lint": "buf lint",
+    "breaking": "buf breaking --against .git#branch=main"
+  }
+}

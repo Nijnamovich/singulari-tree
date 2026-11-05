@@ -1,0 +1,440 @@
+syntax = "proto3";
+
+package singularitree.v1;
+
+import "domain.proto";
+
+option go_package = "github.com/SingulariTree/go-core/gen/go/singularitree/v1;singularitreev1";
+
+// Service GitCore — primary gRPC contract (ipc-strategy.md §2.3 proto sketch)
+service GitCore {
+  rpc Ping(PingRequest) returns (PingResponse);
+  rpc OpenRepository(OpenRepositoryRequest) returns (Repository);
+  rpc GetRepository(GetRepositoryRequest) returns (Repository);
+  rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse);
+  rpc RemoveRepository(RemoveRepositoryRequest) returns (RemoveRepositoryResponse);
+  rpc RelocateRepository(RelocateRepositoryRequest) returns (Repository);
+  rpc GetCommits(GetCommitsRequest) returns (GetCommitsResponse);
+  // Root-qualified to disambiguate from the `Commit` service method (which would
+  // otherwise shadow the message of the same name in this service's scope).
+  rpc StreamCommits(StreamCommitsRequest) returns (stream .singularitree.v1.Commit);
+  rpc GetBranches(GetBranchesRequest) returns (GetBranchesResponse);
+  rpc GetRemotes(GetRemotesRequest) returns (GetRemotesResponse);
+  rpc GetTags(GetTagsRequest) returns (GetTagsResponse);
+  rpc GetStashes(GetStashesRequest) returns (GetStashesResponse);
+  rpc GetWorktrees(GetWorktreesRequest) returns (GetWorktreesResponse);
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+  rpc GetDiff(GetDiffRequest) returns (Diff);
+  rpc Stage(StageRequest) returns (StageResponse);
+  rpc Unstage(UnstageRequest) returns (UnstageResponse);
+  // Hunk/line staging and discard (ADR-0020). The renderer addresses by index
+  // only; the core re-derives the diff and constructs the patch.
+  rpc StageHunk(StageHunkRequest) returns (StageHunkResponse);
+  rpc UnstageHunk(UnstageHunkRequest) returns (UnstageHunkResponse);
+  rpc DiscardHunk(DiscardHunkRequest) returns (DiscardHunkResponse);
+  // File-level discard; the only discard that accepts untracked paths.
+  rpc Discard(DiscardRequest) returns (DiscardResponse);
+  // Reset soft/mixed/hard (ADR-0021).
+  rpc Reset(ResetRequest) returns (ResetResponse);
+  // Commit change-size gauge (ADR-0023).
+  rpc GetCommitStats(GetCommitStatsRequest) returns (GetCommitStatsResponse);
+  rpc Commit(CommitRequest) returns (.singularitree.v1.Commit);
+  rpc Checkout(CheckoutRequest) returns (CheckoutResponse);
+  // StashPush saves working-tree changes to a new stash entry (git stash push)
+  // so a subsequent checkout can proceed cleanly.
+  rpc StashPush(StashPushRequest) returns (StashPushResponse);
+  // Advanced-git mutations (ADR-028): branch CRUD, merge, tag CRUD and stash
+  // apply/pop/drop. The renderer addresses by name/ref/index only; the core
+  // constructs and runs the git commands.
+  rpc CreateBranch(CreateBranchRequest) returns (.singularitree.v1.Branch);
+  rpc RenameBranch(RenameBranchRequest) returns (.singularitree.v1.Branch);
+  rpc DeleteBranch(DeleteBranchRequest) returns (DeleteBranchResponse);
+  rpc Merge(MergeRequest) returns (MergeResponse);
+  // Cherry-pick / revert ONE commit onto the current branch (ADR-0042). The
+  // renderer sends one bare revision string; the core resolves it to a commit
+  // and refuses anything it cannot safely apply (merge commits, a busy
+  // sequencer, a detached HEAD). A conflict is surfaced as data, exactly like
+  // Merge: the tree is left conflicted and the response reports has_conflict.
+  rpc CherryPick(CherryPickRequest) returns (CherryPickResponse);
+  rpc Revert(RevertRequest) returns (RevertResponse);
+  // Read-only revision -> commit resolution for the cherry-pick preview, so the
+  // dialog can show the target before applying anything.
+  rpc ResolveRevision(ResolveRevisionRequest) returns (.singularitree.v1.Commit);
+  rpc CreateTag(CreateTagRequest) returns (.singularitree.v1.Tag);
+  rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
+  rpc StashApply(StashApplyRequest) returns (StashApplyResponse);
+  rpc StashPop(StashPopRequest) returns (StashPopResponse);
+  rpc StashDrop(StashDropRequest) returns (StashDropResponse);
+  rpc Fetch(FetchRequest) returns (stream Progress);
+  rpc Push(PushRequest) returns (stream Progress);
+  rpc Pull(PullRequest) returns (stream Progress);
+  rpc Watch(WatchRequest) returns (stream FsChangedEvent);
+  // git-flow workflow presets (ADR-027), built on the ADR-028 operations. The
+  // core owns the branch/merge/tag sequence; the renderer addresses by
+  // kind/name only.
+  rpc GetGitFlowConfig(GetGitFlowConfigRequest) returns (GitFlowConfig);
+  rpc SetGitFlowConfig(SetGitFlowConfigRequest) returns (GitFlowConfig);
+  rpc StartGitFlow(StartGitFlowRequest) returns (GitFlowResult);
+  rpc FinishGitFlow(FinishGitFlowRequest) returns (GitFlowResult);
+}
+
+// Health
+message PingRequest {}
+message PingResponse {
+  bool ok = 1;
+  uint64 uptime_ms = 2;
+  uint32 queue_depth = 3;
+}
+
+// Repository
+message OpenRepositoryRequest { string fs_path = 1; }
+message GetRepositoryRequest { string repo_id = 1; }
+message ListRepositoriesRequest {}
+message ListRepositoriesResponse { repeated Repository repositories = 1; }
+message RemoveRepositoryRequest { string repo_id = 1; }
+message RemoveRepositoryResponse {}
+
+// Repoint a tracked repository at a different filesystem path (P4.1 polish):
+// the folder was moved/renamed and the registration must follow it instead of
+// being deleted and re-created (which would mint a new repository id and drop
+// the cached rows). Validates the new path exactly like OpenRepository.
+message RelocateRepositoryRequest {
+  string repo_id = 1;
+  string fs_path = 2;
+}
+
+// Commits (windowed + streaming)
+message GetCommitsRequest {
+  string repo_id = 1;
+  uint32 offset = 2;
+  uint32 limit = 3;
+  // Opt-in ref scope (ADR-0042). Empty means "walk from HEAD", which is the
+  // pre-existing behaviour and stays bit-identical (cache included). One or
+  // more refs switches the walk to the union HEAD ∪ refs in topological order,
+  // which is how the branch lens shows a branch's own history without checking
+  // it out; a lensed walk always bypasses the commit-window cache, whose key
+  // carries no ref dimension.
+  repeated string refs = 4;
+}
+message GetCommitsResponse {
+  repeated Commit commits = 1;
+  uint32 total = 2;
+  // Parallel-array contract: lanes is index-aligned with commits, i.e.
+  // lanes[i] is the lane assignment for commits[i]; both arrays share length.
+  repeated Lane lanes = 3; // parallel to `commits`: lanes[i] belongs to commits[i]
+  // Parallel-array contract for the branch lens (ADR-0042): in_refs[i] is true
+  // when commits[i] is reachable from the requested `refs`, i.e. it belongs to
+  // the lensed branch/tag. It is always parallel to `commits` (same length) and
+  // left empty when the request carried no refs — the renderer then renders
+  // exactly today's graph and pays for no membership walk.
+  repeated bool in_refs = 4; // parallel to `commits`, same length
+}
+message StreamCommitsRequest {
+  string repo_id = 1;
+  uint32 offset = 2;
+  uint32 limit = 3;
+}
+
+// Branches / remotes / tags / stashes / worktrees
+message GetBranchesRequest { string repo_id = 1; }
+message GetBranchesResponse { repeated Branch branches = 1; }
+
+message GetRemotesRequest { string repo_id = 1; }
+message GetRemotesResponse { repeated Remote remotes = 1; }
+
+message GetTagsRequest { string repo_id = 1; }
+message GetTagsResponse { repeated Tag tags = 1; }
+
+message GetStashesRequest { string repo_id = 1; }
+message GetStashesResponse { repeated Stash stashes = 1; }
+
+message GetWorktreesRequest { string repo_id = 1; }
+message GetWorktreesResponse { repeated Worktree worktrees = 1; }
+
+// Advanced-git mutations (ADR-028). All field numbers are append-only; the
+// renderer addresses by name/ref/index and the core constructs the git command.
+enum MergeStrategy {
+  MERGE_STRATEGY_UNSPECIFIED = 0;
+  MERGE = 1;
+  NO_FF = 2;
+  FF_ONLY = 3;
+  SQUASH = 4;
+}
+message CreateBranchRequest { string repo_id = 1; string name = 2; string start_point = 3; bool checkout = 4; }
+message RenameBranchRequest { string repo_id = 1; string old_name = 2; string new_name = 3; }
+message DeleteBranchRequest { string repo_id = 1; string name = 2; bool force = 3; }
+message DeleteBranchResponse {}
+message MergeRequest { string repo_id = 1; string ref = 2; MergeStrategy strategy = 3; bool no_commit = 4; string message = 5; }
+message MergeResponse { bool has_conflict = 1; string oid = 2; }
+
+// Cherry-pick / revert (ADR-0042). Field numbers are append-only.
+//
+// `source` is ONE bare revision string — a sha, a short sha, a local branch, a
+// remote-tracking ref, a tag or a rev expression — resolved to a commit inside
+// the core. There is no kind discriminator on the wire (the Merge.ref /
+// Reset.to / CreateTag.target convention) and the renderer never builds a
+// command or sends a flag. `record_origin` maps to `-x`; `no_commit` maps to
+// `--no-commit` (the change is left staged and nothing is committed).
+message CherryPickRequest {
+  string repo_id = 1;
+  string source = 2;
+  bool record_origin = 3;
+  bool no_commit = 4;
+}
+message CherryPickResponse {
+  bool has_conflict = 1;
+  string oid = 2;
+}
+message RevertRequest {
+  string repo_id = 1;
+  string source = 2;
+}
+message RevertResponse {
+  bool has_conflict = 1;
+  string oid = 2;
+}
+// ResolveRevisionRequest resolves a revision to a commit without mutating
+// anything (ADR-0042): the cherry-pick dialog previews sha/subject/author/date
+// before the user applies. An unresolvable revision is COMMIT_NOT_FOUND.
+message ResolveRevisionRequest {
+  string repo_id = 1;
+  string revision = 2;
+}
+
+message CreateTagRequest { string repo_id = 1; string name = 2; string target = 3; bool annotated = 4; string message = 5; bool force = 6; }
+message DeleteTagRequest { string repo_id = 1; string name = 2; }
+message DeleteTagResponse {}
+message StashApplyRequest { string repo_id = 1; int32 index = 2; bool restore_index = 3; }
+message StashApplyResponse {}
+message StashPopRequest { string repo_id = 1; int32 index = 2; }
+message StashPopResponse {}
+message StashDropRequest { string repo_id = 1; int32 index = 2; }
+message StashDropResponse {}
+
+// Status & diff
+message GetStatusRequest { string repo_id = 1; }
+message GetStatusResponse { repeated FileStatus files = 1; }
+
+message GetDiffRequest {
+  string repo_id = 1;
+  string from = 2; // Oid hex
+  string to = 3;   // Oid hex
+  // Per-file selector (ADR-0020). Empty means "all changed files"; a non-empty
+  // value restricts the diff to that path.
+  string path = 4;
+  // HEAD->index instead of HEAD->worktree (maps to `git diff --cached`).
+  bool staged = 5;
+}
+
+// Stage
+message StageRequest {
+  string repo_id = 1;
+  repeated string paths = 2;
+}
+message StageResponse {}
+
+message UnstageRequest {
+  string repo_id = 1;
+  repeated string paths = 2;
+}
+message UnstageResponse {}
+
+// Hunk/line staging and discard (ADR-0020).
+//
+// Addressing model: the renderer sends indices only; the core re-derives the
+// diff and constructs the minimal patch (SSOT in core). `hunk_index` is the
+// 0-based index into the addressed file's hunks. `line_indices` selects
+// individual changed lines by their 0-based index into the addressed hunk's
+// line list; an empty list means "the whole hunk". Untracked files are
+// file-level only — `git diff` never shows them, so hunk/line operations do not
+// apply to them.
+message StageHunkRequest {
+  string repo_id = 1;
+  string path = 2;
+  uint32 hunk_index = 3;
+  repeated uint32 line_indices = 4; // empty = whole hunk
+}
+message StageHunkResponse {}
+
+message UnstageHunkRequest {
+  string repo_id = 1;
+  string path = 2;
+  uint32 hunk_index = 3;
+  repeated uint32 line_indices = 4; // empty = whole hunk
+}
+message UnstageHunkResponse {}
+
+message DiscardHunkRequest {
+  string repo_id = 1;
+  string path = 2;
+  uint32 hunk_index = 3;
+  repeated uint32 line_indices = 4; // empty = whole hunk
+}
+message DiscardHunkResponse {}
+
+// File-level discard (ADR-0020). The ADR left the exact shape at decision level;
+// this minimal `{repo_id, paths}` form is chosen. Tracked paths are restored
+// from HEAD/index; untracked paths are removed. Hunk-level discard never
+// accepts untracked paths, so this is their only discard path.
+message DiscardRequest {
+  string repo_id = 1;
+  repeated string paths = 2;
+}
+message DiscardResponse {}
+
+// Reset soft/mixed/hard (ADR-0021). `to` is an oid hex or a ref, resolved to an
+// oid in core. The mode is mandatory: RESET_MODE_UNSPECIFIED is rejected.
+// HARD is destructive; the renderer must confirm before calling.
+message ResetRequest {
+  string repo_id = 1;
+  string to = 2; // oid hex or ref
+  ResetMode mode = 3;
+}
+enum ResetMode {
+  RESET_MODE_UNSPECIFIED = 0;
+  SOFT = 1;
+  MIXED = 2;
+  HARD = 3;
+}
+message ResetResponse {}
+
+// Commit change-size gauge (ADR-0023). Counts only; cached in SQLite.
+message GetCommitStatsRequest {
+  string repo_id = 1;
+  repeated string oids = 2;
+}
+message GetCommitStatsResponse {
+  repeated CommitStats stats = 1;
+}
+
+// Commit
+message CommitRequest {
+  string repo_id = 1;
+  string message = 2;
+  Signature author = 3; // optional override
+}
+message CheckoutRequest {
+  string repo_id = 1;
+  string ref_name = 2;
+  // git checkout -f: discard tracked working-tree modifications.
+  bool force = 3;
+  // git clean -fd before checkout: discard untracked files too. Implies force.
+  bool discard_untracked = 4;
+}
+message CheckoutResponse {}
+
+// StashPush saves the working-tree changes to the stash stack. Used by the
+// branch-switch confirmation flow to "save the changes" before checking out.
+message StashPushRequest {
+  string repo_id = 1;
+  string message = 2; // optional; empty -> core picks a default
+}
+message StashPushResponse {
+  Stash stash = 1;
+}
+
+// Fetch / Push / Pull with progress streaming.
+//
+// The additive fields below un-defer previously-deferred dialog options; each
+// maps to the named git flag. Field numbers on the original messages are frozen
+// (ADR-003); only new numbers are appended.
+message FetchRequest {
+  string repo_id = 1;
+  string remote = 2;
+  // Previously-deferred `fetch.prune` — map to `git fetch --prune`.
+  bool prune = 3;
+  // Previously-deferred `fetch.tags` — map to `git fetch --tags`.
+  bool tags = 4;
+  // Previously-deferred `fetch.overwriteTags` — map to `git fetch --force` (updates moved tags).
+  bool force = 5;
+}
+message PushRequest {
+  string repo_id = 1;
+  string remote = 2;
+  string branch = 3;
+  // Previously-deferred `push.remoteBranch` — target remote branch name when it
+  // differs from the local branch. Chosen over a free-form refspec so the core
+  // controls the mapping and rejects unsafe values; maps to `git push <remote>
+  // <branch>:<remote_branch>`. Empty means "same name as <branch>".
+  string remote_branch = 4;
+  // Previously-deferred `push.track` — map to `git push --set-upstream`.
+  bool set_upstream = 5;
+  // Previously-deferred `push.tags` — map to `git push --tags`.
+  bool tags = 6;
+  // Previously-deferred `push.force` — map to `git push --force`.
+  bool force = 7;
+}
+message PullRequest {
+  string repo_id = 1;
+  string remote = 2;
+  string branch = 3;
+  // Previously-deferred `pull.intoLocal` — local branch to fast-forward/merge
+  // into; maps to `git pull <remote> <branch>:<local_branch>`. Empty means the
+  // currently checked-out branch.
+  string local_branch = 4;
+  // Previously-deferred `pull.commitMerged` — when true, do not commit the merge
+  // (maps to `git pull --no-commit`).
+  bool no_commit = 5;
+  // Previously-deferred `pull.includeMergedMessages` — map to `git pull --log`.
+  bool log = 6;
+  // Previously-deferred `pull.noFF` — map to `git pull --no-ff`.
+  bool no_ff = 7;
+  // Previously-deferred `pull.rebase` — map to `git pull --rebase`.
+  bool rebase = 8;
+}
+message Progress {
+  uint32 percent = 1;
+  string message = 2;
+}
+
+// Watcher push
+message WatchRequest { string repo_id = 1; }
+message FsChangedEvent {
+  string repo_id = 1;
+  repeated string paths = 2;
+}
+
+// git-flow presets (ADR-027). Configuration is SQLite metadata (never Git
+// data); GetGitFlowConfig on an unset repository returns the defaults below.
+enum GitFlowKind {
+  GIT_FLOW_KIND_UNSPECIFIED = 0;
+  FEATURE = 1;
+  RELEASE = 2;
+  HOTFIX = 3;
+}
+message GitFlowConfig {
+  string main_branch = 1;        // default "main"
+  string develop_branch = 2;     // default "develop"
+  string feature_prefix = 3;     // default "feature/"
+  string release_prefix = 4;     // default "release/"
+  string hotfix_prefix = 5;      // default "hotfix/"
+  string version_tag_prefix = 6; // default "v"
+}
+message GetGitFlowConfigRequest { string repo_id = 1; }
+message SetGitFlowConfigRequest {
+  string repo_id = 1;
+  GitFlowConfig config = 2;
+}
+message StartGitFlowRequest {
+  string repo_id = 1;
+  GitFlowKind kind = 2;
+  string name = 3;
+  // Optional override for the branch start point; empty uses the kind's base
+  // (develop for feature/release, main for hotfix).
+  string base = 4;
+}
+message FinishGitFlowRequest {
+  string repo_id = 1;
+  GitFlowKind kind = 2;
+  string name = 3;
+  bool delete_branch = 4;
+}
+// Result of a git-flow start/finish. `branch` is the workflow branch that was
+// created or finished; `steps` lists the operations performed, in order; on a
+// merge conflict the sequence stops, the tree is left conflicted and
+// `has_conflict` is true (the MERGE_CONFLICT code travels in the trailer).
+message GitFlowResult {
+  string branch = 1;
+  repeated string steps = 2;
+  bool has_conflict = 3;
+}

@@ -1,0 +1,89 @@
+# electron-builder config for the SingulariTree desktop shell.
+# UNSIGNED builds only — no signing, notarization or auto-update keys.
+#
+# Prerequisites before running `npm run pack` / `npm run dist`:
+#   ./tools/scripts/build-go-core.sh        -> <repo>/dist/go-core
+#   (cd apps/angular && npm run build)      -> apps/angular/dist/browser
+#   (cd apps/electron && npm run build)     -> apps/electron/dist/main/main.js
+#
+# `from` paths are resolved relative to this config/package dir (apps/electron).
+
+appId: com.singularitree.app
+productName: SingulariTree
+asar: true
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - package.json
+  - "!src/**"
+  - "!e2e/**"
+  - "!**/*.map"
+
+# Renderer bundle, go-core binary and proto SSOT live outside apps/electron;
+# they are copied verbatim into the packaged resources directory.
+extraResources:
+  - from: build/icon.png
+    to: build/icon.png
+  - from: ../../apps/angular/dist/browser
+    to: renderer
+  - from: ../../dist
+    filter:
+      - go-core
+      - go-core.exe
+    to: go-core
+  - from: ../../libs/contracts/proto
+    filter:
+      - "*.proto"
+    to: proto
+
+linux:
+  icon: build/icon.png
+  target:
+    - AppImage
+    - deb
+  category: Utility
+  # Without this, electron-builder falls back to the package name
+  # (@singularitree/electron), so the scoped npm name leaks into the install
+  # layout: /opt/SingulariTree/@singularitreeelectron plus a matching
+  # "@singularitreeelectron.desktop" entry and hicolor icons. An explicit
+  # executableName yields /opt/SingulariTree/singularitree, singularitree.desktop
+  # and singularitree.png.
+  executableName: singularitree
+  # Required by the deb (fpm) target: without an author/maintainer the build
+  # aborts with "It is required to set Linux .deb package maintainer".
+  maintainer: David <zaraza_9@hotmail.com>
+
+win:
+  icon: build/icon.ico
+  target:
+    - nsis
+    - portable
+
+# Asset names for the two Windows targets. electron-builder v25 reads these
+# per-target options from the TOP level (`config.nsis` / `config.portable`);
+# `win.nsis` / `win.portable` are NOT valid schema keys and are rejected.
+# Default names would be "SingulariTree Setup <version>.exe" (NSIS) and
+# "SingulariTree <version>.exe" (portable) — the spaces become %20 in the
+# download URL. These explicit names keep both assets distinguishable.
+nsis:
+  artifactName: SingulariTree-Setup-${version}-${arch}.${ext}
+
+portable:
+  artifactName: SingulariTree-Portable-${version}-${arch}.${ext}
+
+# Asset names for the two Linux targets. Pinned for the same reason as the
+# Windows ones (top-level `config.appImage` / `config.deb`), plus one defect
+# that only pinning avoids: with the DEFAULT name the deb target resolves to
+# "@singularitree/electron_0.1.0_amd64.deb", and the scope's "/" is treated as a
+# path separator, so the package escapes into release/@singularitree/.
+# The ${arch} token legitimately diverges per target: getArtifactArchName()
+# yields "x86_64" for AppImage but "amd64" for deb.
+appImage:
+  artifactName: SingulariTree-AppImage-${version}-${arch}.${ext}
+
+deb:
+  artifactName: SingulariTree-deb-${version}-${arch}.${ext}

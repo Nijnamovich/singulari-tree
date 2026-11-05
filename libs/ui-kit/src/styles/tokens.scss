@@ -1,0 +1,389 @@
+/*
+ * SingulariTree ui-kit — design tokens: the canonical two-tier layer.
+ *
+ * Tier 1 (`--st-prim-*`) holds the raw palette of the committed visual
+ * direction (plan §2.2). Raw values only — never referenced by a component.
+ * Tier 2 (semantic) is the only layer components consume: `--st-color-*`,
+ * `--st-space-*`, `--st-font-*`, `--st-size-*`, `--st-radius-*`,
+ * `--st-motion-*`, `--st-z-*`.
+ *
+ * Every semantic token is defined in BOTH the `:root` (dark defaults) block
+ * and the matched `[data-theme='light']` block — never in only one. That
+ * symmetry is the theming fix: a missing light value can no longer silently
+ * fall back to a dark hex, so no `var(--st-*, #hex)` fallback is ever needed.
+ *
+ * P4.2 Dark Neon remap: at the operator's request the dark theme was remapped
+ * onto a near-black, slightly blue-tinted "developer studio" palette with a
+ * strict intensity budget — roughly 70% dark surfaces (canvas / chrome / rail /
+ * surface), 20% neutral structure and text (border / muted), and 10% bright
+ * accents — so hierarchy comes from colour *intensity* instead of everything
+ * glowing at once. Accent roles are assigned per meaning: turquoise
+ * (--st-color-accent #37e0d0) = interaction / selection / focus / graph
+ * connections / primary action; violet = branches; electric blue
+ * (--st-color-info #60a5fa) = navigation / history / informational and
+ * origin/* remotes; amber = pending changes / warnings / tags; mint = mainline
+ * ref and sync / staged; coral (--st-color-danger #fb7185) is RESERVED for
+ * errors only. #37e0d0 reads ~11:1 against the #171923 canvas, comfortably
+ * clearing WCAG AA for the 11–13px mono hash/path text that consumes
+ * --st-color-accent — which is why turquoise, not a darker blue, carries the
+ * accent role. Geometry, hairlines, radii, the type scale and the light
+ * theme's neutrals are untouched; only the colour family (and the light
+ * selection / graph / ref / avatar values) moved.
+ */
+
+/* ── Tier 1 — primitives (raw values, theme-independent) ──────────────── */
+:root {
+  /* neutrals — blue-tinted dark ramp */
+  --st-prim-ink-900: #171923; /* canvas    */
+  --st-prim-ink-850: #191d28; /* rail      */
+  --st-prim-ink-800: #1f2433; /* surface   */
+  --st-prim-ink-750: #262b3b; /* surface-2 */
+  --st-prim-ink-700: #2a3040; /* raised    */
+  --st-prim-ink-600: #333a4d; /* border    */
+  --st-prim-ink-050: #e7ecf7; /* text      */
+  --st-prim-ink-300: #9aa3b8; /* muted     */
+  /* accent — turquoise electric */
+  --st-prim-cyan-400: #37e0d0;
+  --st-prim-cyan-500: #1fa79e;
+  --st-prim-cyan-600: #177f79;
+  --st-prim-cyan-700: #0d4f4b;
+  /* other bright accents */
+  --st-prim-violet-400: #a78bfa;
+  --st-prim-blue-400: #60a5fa;
+  --st-prim-amber-400: #fbbf24;
+  --st-prim-coral-400: #fb7185;
+  --st-prim-mint-300: #6ee7b7;
+  --st-prim-rose-300: #ffacaf;
+  /* diff tints */
+  --st-prim-diff-ins-bg: #17322b;
+  --st-prim-diff-ins-fg: #b4f1d6;
+  --st-prim-diff-del-bg: #3a2229;
+  --st-prim-diff-del-fg: #fdd3d9;
+  --st-prim-diff-hunk-bg: #1c2634;
+  --st-prim-diff-hunk-fg: #a9c8ee;
+  /* graph lanes */
+  --st-prim-graph-lane-1: #37e0d0;
+  --st-prim-graph-lane-2: #a78bfa;
+  --st-prim-graph-lane-3: #fbbf24;
+  --st-prim-graph-lane-4: #6ee7b7;
+  --st-prim-graph-lane-5: #fb923c;
+  --st-prim-graph-lane-6: #60a5fa;
+  --st-prim-graph-lane-7: #a3e635;
+  --st-prim-graph-lane-8: #7dd3fc;
+  /* avatar */
+  --st-prim-avatar-bg: #2a3040;
+  --st-prim-avatar-fg: #a78bfa;
+}
+
+/* ── Tier 2 — semantic tokens, dark defaults ───────────────────────────── */
+:root {
+  color-scheme: dark;
+
+  /* surfaces & structure — the ~70% dark base */
+  --st-color-bg: #171923; /* canvas */
+  --st-color-chrome: #1b1f2b; /* top / status bar */
+  --st-color-rail: #191d28; /* nav rail */
+  --st-color-surface: #1f2433; /* panels, panes, cards */
+  --st-color-surface-2: #262b3b; /* raised strips, field background */
+  --st-color-raised: #2a3040; /* popovers, modals */
+  --st-color-border: #333a4d; /* hairline structure */
+  --st-color-border-strong: color-mix(in srgb, var(--st-color-border) 94%, var(--st-color-text));
+  --st-color-text: #e7ecf7;
+  --st-color-muted: #9aa3b8;
+
+  /* accent — turquoise: interaction, selection, focus */
+  --st-color-accent: #37e0d0;
+  --st-color-accent-soft: color-mix(in srgb, var(--st-color-accent) 14%, transparent);
+  --st-color-accent-contrast: #10241f;
+  --st-color-focus: #37e0d0;
+  /* info — electric blue: navigation, links, history, informational */
+  --st-color-info: #60a5fa;
+
+  /* selection */
+  --st-color-selected: #2a3149;
+  --st-color-selected-bar: #37e0d0;
+  --st-color-selected-border: #46517a;
+
+  /* status */
+  --st-color-add: #6ee7b7; /* mint — mainline ref, staged, sync indicator */
+  --st-color-add-soft: color-mix(in srgb, var(--st-color-add) 14%, transparent);
+  --st-color-remove: #ffacaf; /* kept lighter than coral so coral stays reserved */
+  --st-color-remove-soft: color-mix(in srgb, var(--st-color-remove) 14%, transparent);
+  --st-color-warn: #fbbf24; /* amber — pending changes, warnings */
+  --st-color-warn-soft: color-mix(in srgb, var(--st-color-warn) 14%, transparent);
+  --st-color-danger: #fb7185; /* coral — errors, failures, conflicts; RESERVED */
+  --st-color-danger-soft: color-mix(in srgb, var(--st-color-danger) 14%, transparent);
+
+  /* diff tints */
+  --st-color-diff-insert-bg: #17322b;
+  --st-color-diff-insert-fg: #b4f1d6;
+  --st-color-diff-delete-bg: #3a2229;
+  --st-color-diff-delete-fg: #fdd3d9;
+  --st-color-diff-hunk-bg: #1c2634;
+  --st-color-diff-hunk-fg: #a9c8ee;
+  --st-color-diff-gutter-bg: #191d28;
+  --st-color-diff-gutter-fg: #8590a3;
+
+  /* graph lanes */
+  --st-color-graph-lane-1: #37e0d0;
+  --st-color-graph-lane-2: #a78bfa;
+  --st-color-graph-lane-3: #fbbf24;
+  --st-color-graph-lane-4: #6ee7b7;
+  --st-color-graph-lane-5: #fb923c;
+  --st-color-graph-lane-6: #60a5fa;
+  --st-color-graph-lane-7: #a3e635;
+  --st-color-graph-lane-8: #7dd3fc;
+
+  /* ref pills */
+  --st-color-ref-head: #37e0d0; /* HEAD */
+  --st-color-ref-branch: #a78bfa; /* local branch */
+  --st-color-ref-main: #6ee7b7; /* mainline branch */
+  --st-color-ref-remote: #60a5fa; /* origin/* */
+  --st-color-ref-tag: #fbbf24; /* tag */
+
+  /* status pills (badges) — fill from a low-alpha mix of the hue, solid fg */
+  --st-color-badge-branch-bg: color-mix(in srgb, var(--st-color-accent) 12%, transparent);
+  --st-color-badge-branch-fg: var(--st-color-accent);
+  --st-color-badge-tag-bg: color-mix(in srgb, var(--st-color-warn) 12%, transparent);
+  --st-color-badge-tag-fg: var(--st-color-warn);
+  --st-color-badge-success-bg: color-mix(in srgb, var(--st-color-add) 12%, transparent);
+  --st-color-badge-success-fg: var(--st-color-add);
+  --st-color-badge-warning-bg: color-mix(in srgb, var(--st-color-warn) 12%, transparent);
+  --st-color-badge-warning-fg: var(--st-color-warn);
+
+  /* misc */
+  --st-color-avatar-bg: #2a3040;
+  --st-color-avatar-fg: #a78bfa;
+  --st-color-overlay: rgba(15, 18, 32, 0.62);
+
+  /* spacing — base unit 4px */
+  --st-space-1: 4px;
+  --st-space-2: 8px;
+  --st-space-3: 12px;
+  --st-space-4: 16px;
+  --st-space-5: 20px;
+  --st-space-6: 24px;
+  --st-space-7: 32px;
+  --st-space-8: 40px;
+
+  /* typography */
+  --st-font-ui: Inter, system-ui, -apple-system, sans-serif;
+  --st-font-mono: Consolas, 'Liberation Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --st-font-10: 10px;
+  --st-font-11: 11px;
+  --st-font-12: 12px;
+  --st-font-13: 13px;
+  --st-font-17: 17px;
+  --st-font-22: 22px;
+  --st-leading-tight: 1.25;
+  --st-leading-ui: 1.5;
+  --st-leading-code: 24px;
+
+  /* geometry */
+  --st-hairline: 1px;
+  --st-size-topbar: 64px;
+  --st-size-statusbar: 31px;
+  --st-size-rail: 224px;
+  --st-size-rail-collapsed: 40px;
+  --st-size-drawer: 264px;
+  --st-size-detail-pane: 380px;
+  --st-size-pane-min: 320px;
+  --st-size-row-graph: 28px;
+  --st-size-row-tree: 28px;
+  --st-size-row-tree-dense: 24px;
+  --st-size-control-sm: 24px;
+  --st-size-control-md: 28px;
+  --st-size-control-lg: 32px;
+  --st-size-tab: 220px;
+  --st-size-selection-bar-w: 3px;
+
+  /* radii */
+  --st-radius-1: 3px;
+  --st-radius-2: 4px;
+  --st-radius-3: 5px;
+  --st-radius-4: 8px;
+  --st-radius-pill: 999px;
+
+  /* motion */
+  --st-motion-fast: 120ms;
+  --st-motion-base: 180ms;
+  --st-motion-slow: 240ms;
+  --st-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* z-index scale */
+  --st-z-sticky: 10;
+  --st-z-rail: 15;
+  --st-z-backdrop: 30;
+  --st-z-drawer: 35;
+  --st-z-popover: 40;
+  --st-z-menu: 45;
+  --st-z-modal: 100;
+  --st-z-toast: 120;
+}
+
+/* ── Tier 2 — semantic tokens, light theme ────────────────────────────── */
+[data-theme='light'] {
+  color-scheme: light;
+
+  /* surfaces & structure */
+  --st-color-bg: #f7f8f7;
+  --st-color-chrome: #eceeed;
+  --st-color-rail: #f0f2f1;
+  --st-color-surface: #ffffff;
+  --st-color-surface-2: #f4f6f5;
+  --st-color-raised: #ffffff;
+  --st-color-border: #d8dcda;
+  --st-color-border-strong: color-mix(in srgb, var(--st-color-border) 90%, var(--st-color-text));
+  --st-color-text: #14181a;
+  --st-color-muted: #5b6668;
+
+  /* accent — turquoise (darkened for light surfaces) */
+  --st-color-accent: #0f7f7c;
+  --st-color-accent-soft: color-mix(in srgb, var(--st-color-accent) 12%, transparent);
+  --st-color-accent-contrast: #ffffff;
+  --st-color-focus: #0f7f7c;
+  /* info — electric blue */
+  --st-color-info: #1d4ed8;
+
+  /* selection */
+  --st-color-selected: #e2e6f8;
+  --st-color-selected-bar: #0f7f7c;
+  --st-color-selected-border: #a9b4e8;
+
+  /* status */
+  --st-color-add: #1c7c3c;
+  --st-color-add-soft: color-mix(in srgb, var(--st-color-add) 10%, transparent);
+  --st-color-remove: #b3261e;
+  --st-color-remove-soft: color-mix(in srgb, var(--st-color-remove) 10%, transparent);
+  --st-color-warn: #8a6100;
+  --st-color-warn-soft: color-mix(in srgb, var(--st-color-warn) 10%, transparent);
+  --st-color-danger: #b3261e;
+  --st-color-danger-soft: color-mix(in srgb, var(--st-color-danger) 10%, transparent);
+
+  /* diff tints */
+  --st-color-diff-insert-bg: #e6f7ea;
+  --st-color-diff-insert-fg: #14532d;
+  --st-color-diff-delete-bg: #fde8e9;
+  --st-color-diff-delete-fg: #7f1d1d;
+  --st-color-diff-hunk-bg: #e8f4f3;
+  --st-color-diff-hunk-fg: #0f5f5c;
+  --st-color-diff-gutter-bg: #f4f6f5;
+  --st-color-diff-gutter-fg: #626c66;
+
+  /* graph lanes — the neon hues darkened for light surfaces */
+  --st-color-graph-lane-1: #0d9488;
+  --st-color-graph-lane-2: #7c3aed;
+  --st-color-graph-lane-3: #d97706;
+  --st-color-graph-lane-4: #059669;
+  --st-color-graph-lane-5: #ea580c;
+  --st-color-graph-lane-6: #2563eb;
+  --st-color-graph-lane-7: #4d7c0f;
+  --st-color-graph-lane-8: #0284c7;
+
+  /* ref pills */
+  --st-color-ref-head: #0f7f7c; /* HEAD */
+  --st-color-ref-branch: #7c3aed; /* local branch */
+  --st-color-ref-main: #047857; /* mainline branch */
+  --st-color-ref-remote: #1d4ed8; /* origin/* */
+  --st-color-ref-tag: #8a6100; /* tag */
+
+  /* status pills (badges) */
+  --st-color-badge-branch-bg: color-mix(in srgb, var(--st-color-accent) 12%, transparent);
+  --st-color-badge-branch-fg: #0f7f7c;
+  --st-color-badge-tag-bg: color-mix(in srgb, var(--st-color-warn) 12%, transparent);
+  --st-color-badge-tag-fg: #8a6100;
+  --st-color-badge-success-bg: color-mix(in srgb, var(--st-color-add) 12%, transparent);
+  --st-color-badge-success-fg: #1c7c3c;
+  --st-color-badge-warning-bg: color-mix(in srgb, var(--st-color-warn) 12%, transparent);
+  --st-color-badge-warning-fg: #8a6100;
+
+  /* misc */
+  --st-color-avatar-bg: #e7e2fb;
+  --st-color-avatar-fg: #5b21b6;
+  --st-color-overlay: rgba(20, 24, 26, 0.35);
+
+  /*
+   * Theme-independent groups (spacing, typography, geometry, radii, motion,
+   * z) are repeated verbatim below so that EVERY semantic token is defined in
+   * both blocks — a token may never exist in only one theme.
+   */
+  --st-space-1: 4px;
+  --st-space-2: 8px;
+  --st-space-3: 12px;
+  --st-space-4: 16px;
+  --st-space-5: 20px;
+  --st-space-6: 24px;
+  --st-space-7: 32px;
+  --st-space-8: 40px;
+
+  --st-font-ui: Inter, system-ui, -apple-system, sans-serif;
+  --st-font-mono: Consolas, 'Liberation Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --st-font-10: 10px;
+  --st-font-11: 11px;
+  --st-font-12: 12px;
+  --st-font-13: 13px;
+  --st-font-17: 17px;
+  --st-font-22: 22px;
+  --st-leading-tight: 1.25;
+  --st-leading-ui: 1.5;
+  --st-leading-code: 24px;
+
+  --st-hairline: 1px;
+  --st-size-topbar: 64px;
+  --st-size-statusbar: 31px;
+  --st-size-rail: 224px;
+  --st-size-rail-collapsed: 40px;
+  --st-size-drawer: 264px;
+  --st-size-detail-pane: 380px;
+  --st-size-pane-min: 320px;
+  --st-size-row-graph: 28px;
+  --st-size-row-tree: 28px;
+  --st-size-row-tree-dense: 24px;
+  --st-size-control-sm: 24px;
+  --st-size-control-md: 28px;
+  --st-size-control-lg: 32px;
+  --st-size-tab: 220px;
+  --st-size-selection-bar-w: 3px;
+
+  --st-radius-1: 3px;
+  --st-radius-2: 4px;
+  --st-radius-3: 5px;
+  --st-radius-4: 8px;
+  --st-radius-pill: 999px;
+
+  --st-motion-fast: 120ms;
+  --st-motion-base: 180ms;
+  --st-motion-slow: 240ms;
+  --st-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  --st-z-sticky: 10;
+  --st-z-rail: 15;
+  --st-z-backdrop: 30;
+  --st-z-drawer: 35;
+  --st-z-popover: 40;
+  --st-z-menu: 45;
+  --st-z-modal: 100;
+  --st-z-toast: 120;
+}
+
+/* ── Density override (Settings → PreferencesService) ──────────────────── */
+/*
+ * Enforced at runtime exactly like `data-st-motion`: `PreferencesService` writes
+ * `<html data-st-density="compact|comfortable">` synchronously at boot and from
+ * an `effect()` on every change (both values are explicit, so the attribute is
+ * always present and never removed). Overriding ONLY `--st-size-row-tree` flips
+ * every file/tree row consumer at once, while the frozen `--st-size-row-graph`
+ * (graph alignment, must equal `GRAPH_ROW_HEIGHT`) and `--st-size-row-tree-dense`
+ * (nav rail, split detail header, graph rows, diff header) are deliberately
+ * untouched so graph alignment never moves. The shipped default preference is
+ * `comfortable`, so file/tree rows render 28px unless the user picks Compact.
+ * This block sits after the theme blocks and its `:root[data-st-density]`
+ * selector outranks both `:root` and `[data-theme='light']`, so density wins in
+ * either theme.
+ */
+:root[data-st-density='compact'] {
+  --st-size-row-tree: 24px;
+}
+:root[data-st-density='comfortable'] {
+  --st-size-row-tree: 28px;
+}

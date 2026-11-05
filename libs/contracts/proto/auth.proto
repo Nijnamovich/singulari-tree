@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+package singularitree.v1;
+
+option go_package = "github.com/SingulariTree/go-core/gen/go/singularitree/v1;singularitreev1";
+
+// Service Auth — GitHub OAuth prototype (scalable, security deferred)
+// Flow: Angular -> Electron (StartGitHubOAuth -> auth_url) -> shell.openExternal -> loopback callback -> ExchangeCode -> token in-memory
+// Demo: GetGitHubUser + ListGitHubRepos via token held in Go TokenStore or Electron memory (prototype).
+service Auth {
+  rpc GetAuthStatus(GetAuthStatusRequest) returns (GetAuthStatusResponse);
+  rpc StartGitHubOAuth(StartGitHubOAuthRequest) returns (StartGitHubOAuthResponse);
+  rpc ExchangeCode(ExchangeCodeRequest) returns (ExchangeCodeResponse);
+  rpc GetGitHubUser(GetGitHubUserRequest) returns (GitHubUser);
+  rpc ListGitHubRepos(ListGitHubReposRequest) returns (ListGitHubReposResponse);
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  // Additive: obtain a token from the GitHub CLI (`gh auth token`).
+  // OAuth RPCs above are retained as documented future evolution.
+  rpc ConnectGitHubFromCLI(ConnectGitHubFromCLIRequest) returns (ConnectGitHubFromCLIResponse);
+}
+
+message GetAuthStatusRequest {}
+message GetAuthStatusResponse {
+  bool authenticated = 1;
+  string login = 2; // empty if not authenticated
+  AuthStatus status = 3; // additive: source, account, scopes, rate limit
+}
+
+message StartGitHubOAuthRequest {
+  string state = 1; // optional client-generated state; server generates if empty
+}
+message StartGitHubOAuthResponse {
+  string auth_url = 1;
+  string state = 2;
+}
+
+message ExchangeCodeRequest {
+  string code = 1;
+  string state = 2;
+}
+message ExchangeCodeResponse {
+  string access_token = 1; // returned for prototype visibility; prod will not return token
+  GitHubUser user = 2;
+}
+
+message GetGitHubUserRequest {}
+message GitHubUser {
+  int64 id = 1;
+  string login = 2;
+  string name = 3;
+  string avatar_url = 4;
+  string email = 5;
+  string html_url = 6;
+}
+
+message ListGitHubReposRequest {
+  uint32 per_page = 1; // default 30
+  uint32 page = 2;
+  string sort = 3;        // "updated" | "pushed" | "created" | "full_name"
+  string direction = 4;   // "asc" | "desc"
+  string affiliation = 5; // "owner,collaborator,organization_member"
+  string visibility = 6;  // "all" | "public" | "private"
+  string type = 7;        // "all" | "owner" | "public" | "private" | "member"
+}
+message ListGitHubReposResponse {
+  repeated GitHubRepo repos = 1;
+  PageInfo page_info = 2;
+  RateLimit rate_limit = 3;
+}
+
+message GitHubRepo {
+  int64 id = 1;
+  string name = 2;
+  string full_name = 3;
+  bool private = 4;
+  string html_url = 5;
+  string description = 6;
+  string language = 7;
+  int32 stargazers_count = 8;
+  string updated_at = 9;
+  string node_id = 10;
+  string default_branch = 11;
+  string owner_login = 12;
+  string owner_avatar_url = 13;
+  string visibility = 14;   // "public" | "private" | "internal"
+  bool fork = 15;
+  bool archived = 16;
+  bool disabled = 17;
+  string clone_url = 18;
+  string ssh_url = 19;
+  string git_url = 20;
+  string pushed_at = 21;
+  string created_at = 22;
+  int32 forks_count = 23;
+  int32 open_issues_count = 24;
+  repeated string topics = 25;
+  string license_spdx_id = 26;
+  bool is_template = 27;
+  string homepage = 28;
+}
+
+message LogoutRequest {}
+message LogoutResponse {}
+
+// ===== Additive: GitHub CLI (gh) token source =====
+
+// AuthSource identifies how the token was obtained.
+enum AuthSource {
+  AUTH_SOURCE_UNSPECIFIED = 0;
+  AUTH_SOURCE_NONE = 1;
+  AUTH_SOURCE_GITHUB_CLI = 2;
+  AUTH_SOURCE_OAUTH = 3; // future evolution
+}
+
+message AuthStatus {
+  bool authenticated = 1;
+  AuthSource source = 2;
+  string account_login = 3;   // gh account, e.g. "Nijnamovich"
+  string name = 4;
+  string avatar_url = 5;
+  string email = 6;           // MAY BE EMPTY: gh token scopes may omit read:user
+  repeated string scopes = 7; // e.g. ["gist","read:org","repo","workflow"]
+  RateLimit rate_limit = 8;
+}
+
+message ConnectGitHubFromCLIRequest {
+  string gh_binary = 1; // empty -> resolve "gh" on PATH
+  bool verify = 2;      // true -> call GET /user to validate the token
+}
+message ConnectGitHubFromCLIResponse {
+  AuthStatus status = 1;
+  GitHubUser user = 2; // populated when verify=true
+}
+
+// Pagination metadata derived from the GitHub `Link` header (rel="next").
+message PageInfo {
+  uint32 page = 1;
+  uint32 per_page = 2;
+  uint32 next_page = 3; // 0 == no Link rel="next"
+  bool has_more = 4;
+  uint32 total = 5;     // best-effort; 0 when GitHub omits it (/user/repos)
+}
+
+// GitHub REST rate-limit metadata (X-RateLimit-* headers / GET /rate_limit).
+message RateLimit {
+  string resource = 1;  // "core" | "search" | ...
+  uint32 limit = 2;
+  uint32 remaining = 3;
+  int64 reset = 4;      // epoch seconds (X-RateLimit-Reset)
+  string reset_at = 5;  // RFC3339
+}

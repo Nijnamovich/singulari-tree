@@ -1,0 +1,20 @@
+/* SingulariTree global styles — canonical token layer + base resets. */
+
+/* Canonical two-tier token layer and shared utilities (ui-kit). */
+@use '../../../libs/ui-kit/src/styles/tokens';
+@use '../../../libs/ui-kit/src/styles/utilities';
+
+/* Base */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  font-family: var(--st-font-ui);
+  background: var(--st-color-bg);
+  color: var(--st-color-text);
+  overflow: hidden;
+}
