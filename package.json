@@ -30,7 +30,7 @@
     "@vitest/mocker": "4.1.12",
     "dompurify": "3.4.17",
     "joi": "18.2.9",
-    "vite": "8.3.3"
+    "vite": "8.3.5"
   },
   "allowScripts": {
     "electron@42.11.9": true,

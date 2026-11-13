@@ -1,10 +1,11 @@
 # SingulariTree — Tag index
 
 <!-- BEGIN GENERATED: tags -->
-<!-- snapshot: 2026-10-25 -->
+<!-- snapshot: 2026-11-12 -->
 ## Generated tag index
 
-- **adr** — adr-0014-docs-corpus-layout, adr-0015-docs-validator-generated-index, adr-0016-lane-state-and-graph-dod, adr-0017-docs-language-en, adr-0018-renderer-i18n-locale-switch, adr-0019-adr-translation-authorization, adr-0020-diff-per-file-and-hunk-staging, adr-0021-reset-modes, adr-0022-graph-context-menu-shell, adr-0023-commit-change-size-gauge, adr-0029-file-status-screen, adr-0030-history-screen-is-compare-free, adr-0031-repository-relocation-and-missing-folder-recovery, adr-0032-history-commit-file-list-tooltip, adr-0033-commit-details-files-expandable-panel, adr-0034-retire-cross-repo-commit-search, adr-0035-commit-details-redesign-and-inline-hunk-actions, adr-0036-per-tab-fetch, adr-0037-windows-release-and-distribution, adr-0038-drop-macos-support-windows-and-linux-only, adr-0039-linux-release-and-distribution, adr-0040-per-repo-session-graph-selection-lock, adr-0041-forced-dependency-floors-and-electron-42, adr-0042-cherry-pick-and-branch-lens, adr-024-multi-repo-workspaces, adr-025-deep-links-and-clipboard-clone, adr-026-cross-repo-commit-search, adr-027-git-flow-presets, adr-028-advanced-git-rpcs, adr-index
+- **adr** — adr-0014-docs-corpus-layout, adr-0015-docs-validator-generated-index, adr-0016-lane-state-and-graph-dod, adr-0017-docs-language-en, adr-0018-renderer-i18n-locale-switch, adr-0019-adr-translation-authorization, adr-0020-diff-per-file-and-hunk-staging, adr-0021-reset-modes, adr-0022-graph-context-menu-shell, adr-0023-commit-change-size-gauge, adr-0029-file-status-screen, adr-0030-history-screen-is-compare-free, adr-0031-repository-relocation-and-missing-folder-recovery, adr-0032-history-commit-file-list-tooltip, adr-0033-commit-details-files-expandable-panel, adr-0034-retire-cross-repo-commit-search, adr-0035-commit-details-redesign-and-inline-hunk-actions, adr-0036-per-tab-fetch, adr-0037-windows-release-and-distribution, adr-0038-drop-macos-support-windows-and-linux-only, adr-0039-linux-release-and-distribution, adr-0040-per-repo-session-graph-selection-lock, adr-0041-forced-dependency-floors-and-electron-42, adr-0042-cherry-pick-and-branch-lens, adr-0043-vite-8-3-5-and-angular-compiler-22-2-6, adr-024-multi-repo-workspaces, adr-025-deep-links-and-clipboard-clone, adr-026-cross-repo-commit-search, adr-027-git-flow-presets, adr-028-advanced-git-rpcs, adr-index
+- **angular** — adr-0043-vite-8-3-5-and-angular-compiler-22-2-6
 - **bootstrap** — bootstrap-protocol
 - **branch** — adr-028-advanced-git-rpcs
 - **cache** — adr-0023-commit-change-size-gauge, adr-026-cross-repo-commit-search
@@ -18,7 +19,7 @@
 - **core** — adr-0021-reset-modes, adr-0023-commit-change-size-gauge, adr-0031-repository-relocation-and-missing-folder-recovery, adr-0034-retire-cross-repo-commit-search, adr-0042-cherry-pick-and-branch-lens, adr-026-cross-repo-commit-search, adr-027-git-flow-presets, adr-028-advanced-git-rpcs
 - **debt** — accepted-debt
 - **deep-link** — adr-025-deep-links-and-clipboard-clone
-- **dependencies** — adr-0041-forced-dependency-floors-and-electron-42
+- **dependencies** — adr-0041-forced-dependency-floors-and-electron-42, adr-0043-vite-8-3-5-and-angular-compiler-22-2-6
 - **design-system** — design-system
 - **desktop-shell** — adr-0034-retire-cross-repo-commit-search, adr-025-deep-links-and-clipboard-clone
 - **destructive** — adr-0021-reset-modes
@@ -50,7 +51,7 @@
 - **m3** — adr-0029-file-status-screen, adr-0034-retire-cross-repo-commit-search, adr-0036-per-tab-fetch, adr-024-multi-repo-workspaces, adr-025-deep-links-and-clipboard-clone, adr-026-cross-repo-commit-search, adr-027-git-flow-presets, adr-028-advanced-git-rpcs
 - **merge** — adr-028-advanced-git-rpcs
 - **multi-repo** — adr-0036-per-tab-fetch, adr-0040-per-repo-session-graph-selection-lock, adr-024-multi-repo-workspaces
-- **npm** — adr-0041-forced-dependency-floors-and-electron-42
+- **npm** — adr-0041-forced-dependency-floors-and-electron-42, adr-0043-vite-8-3-5-and-angular-compiler-22-2-6
 - **onrails** — adr-0014-docs-corpus-layout, adr-0016-lane-state-and-graph-dod, documentation-system
 - **packaging** — adr-0038-drop-macos-support-windows-and-linux-only
 - **permissions** — repository-configuration
@@ -80,11 +81,11 @@
 - **stats** — adr-0023-commit-change-size-gauge
 - **status** — adr-0029-file-status-screen, adr-0030-history-screen-is-compare-free, adr-0032-history-commit-file-list-tooltip, adr-0033-commit-details-files-expandable-panel, adr-0035-commit-details-redesign-and-inline-hunk-actions
 - **structure** — documentation-system
-- **supply-chain** — adr-0041-forced-dependency-floors-and-electron-42
+- **supply-chain** — adr-0041-forced-dependency-floors-and-electron-42, adr-0043-vite-8-3-5-and-angular-compiler-22-2-6
 - **tag** — adr-028-advanced-git-rpcs
 - **theming** — design-system
 - **tokens** — design-system
-- **tooling** — adr-0041-forced-dependency-floors-and-electron-42
+- **tooling** — adr-0041-forced-dependency-floors-and-electron-42, adr-0043-vite-8-3-5-and-angular-compiler-22-2-6
 - **ui-kit** — adr-0035-commit-details-redesign-and-inline-hunk-actions, design-system
 - **validation** — docs-review-protocol
 - **validator** — adr-0015-docs-validator-generated-index

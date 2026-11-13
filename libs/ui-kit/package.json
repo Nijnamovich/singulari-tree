@@ -12,8 +12,10 @@
   "devDependencies": {
     "@angular/build": "^22.2.1",
     "@angular/compiler-cli": "^22.2.1",
+    "@angular/localize": "^22.2.1",
     "@singularitree/contracts": "*",
-    "ng-packagr": "^22.2.1"
+    "ng-packagr": "^22.2.1",
+    "typescript": "~6.0.3"
   },
   "ngPackage": {
     "dest": "../../dist/libs/ui-kit",
@@ -22,6 +24,6 @@
     }
   },
   "scripts": {
-    "build": "ng-packagr -p ng-package.json -c tsconfig.lib.json"
+    "build": "node -e \"require('node:fs').rmSync('../../dist/libs/contracts-types', { recursive: true, force: true })\" && tsc -p tsconfig.contracts.json && ng-packagr -p ng-package.json -c tsconfig.lib.json"
   }
 }

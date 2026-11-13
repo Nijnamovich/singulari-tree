@@ -12,6 +12,22 @@ appId: com.singularitree.app
 productName: SingulariTree
 asar: true
 
+# The NSIS install directory comes from the PACKAGE name, not from productName:
+# on the default one-click per-user build `getWindowsInstallationDirName()`
+# resolves to `appInfo.sanitizedName`, and sanitizing `@singularitree/electron`
+# strips the "/" so the app landed in %LOCALAPPDATA%\Programs\@singularitreeelectron.
+# Overriding the packaged metadata name gives a fresh install
+# %LOCALAPPDATA%\Programs\SingulariTree while the workspace package.json keeps
+# its scoped name. Two accepted consequences: an existing install is upgraded
+# in place at the directory recorded by its NSIS uninstall key (the old
+# @singularitreeelectron tree stays until it is uninstalled), and the packaged
+# app.asar package.json carries no productName, so `app.getName()` — and with it
+# `app.getPath('userData')` — now resolves to SingulariTree, meaning an upgrading
+# user starts from a fresh Chromium profile. Go-core's SQLite path is unaffected:
+# internal/config/config.go keeps it in the home dir and main.ts passes no dbPath.
+extraMetadata:
+  name: SingulariTree
+
 directories:
   output: release
   buildResources: build
@@ -59,6 +75,12 @@ linux:
 
 win:
   icon: build/icon.ico
+  # An explicit pin, not the install-directory fix: on Windows the executable
+  # name already comes from `productName` (`platformPackager` uses
+  # `appInfo.productFilename`, i.e. SingulariTree), so this only stops the
+  # binary name from drifting if productName changes. The install directory is
+  # governed by `extraMetadata.name` above, not by this key.
+  executableName: SingulariTree
   target:
     - nsis
     - portable

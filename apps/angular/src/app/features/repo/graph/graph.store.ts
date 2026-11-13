@@ -30,6 +30,16 @@ function isIpcUnavailable(err: unknown): boolean {
   );
 }
 
+/** A gRPC call aborted by the shell's channel teardown, not a product failure. */
+function isCancelled(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    (err as { code?: unknown }).code === 'CANCELLED'
+  );
+}
+
 /**
  * Read the root `LiveRegionService` when one exists, else `null`.
  *
@@ -465,8 +475,10 @@ export class GraphStore {
    *
    * Only oids absent from the cache are requested, in one `getCommitStats`
    * call, so a re-render or a repeated window never re-measures. Failures are
-   * silent for the gauge: `IPC_UNAVAILABLE` degrades to `offline`, any other
-   * error is recorded on `statsError` — a missing gauge must not break the graph.
+   * silent for the gauge: `IPC_UNAVAILABLE` degrades to `offline`, `CANCELLED`
+   * (a channel teardown aborted the call) is ignored entirely, any other
+   * error is recorded on `statsError` — a missing gauge must not break the
+   * graph.
    */
   async loadStats(oids: readonly string[]): Promise<void> {
     const id = this.repoId();
@@ -478,12 +490,20 @@ export class GraphStore {
 
     try {
       const resp = await this.bridge.invoke('getCommitStats', { repoId: id, oids: missing });
+      // A cancelled call may resolve without a payload (the shell resolves a
+      // teardown cancellation empty instead of throwing); there is nothing to
+      // measure, so leave the gauge as it is.
+      if (!resp) return;
       this.offline.set(false);
       this.statsError.set(null);
       const next = new Map(cached);
       for (const stat of resp.stats ?? []) next.set(stat.oid, stat);
       this.commitStats.set(next);
     } catch (err) {
+      // Cancellation is not a gauge failure: the unary call was aborted with
+      // its gRPC channel (teardown or reconnect) and the gauge is best-effort,
+      // so it must neither surface an error nor flip the store offline.
+      if (isCancelled(err)) return;
       if (isIpcUnavailable(err)) {
         this.offline.set(true);
       } else {

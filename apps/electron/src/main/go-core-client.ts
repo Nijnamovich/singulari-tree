@@ -1,5 +1,6 @@
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
+import { markSilentCancellation } from '../ipc/app-error';
 import { isStreamingRpc, isUnimplementedStreamingRpc } from '../ipc/channels';
 
 /**
@@ -800,6 +801,18 @@ export class GoCoreClient {
   private metadata: grpc.Metadata | null = null;
   private target = '';
   private connected = false;
+  /**
+   * Incremented on every `close()`. A call captures it on dispatch, so a
+   * CANCELLED that arrives later is attributable to that teardown instead of
+   * being mistaken for the core rejecting a live call.
+   */
+  private closeEpoch = 0;
+  /**
+   * Set only by a shutdown close. grpc-js reports CANCELLED for every call the
+   * channel teardown aborts; at shutdown those have no consumer left and are
+   * benign, whereas a reconnect must still surface them to the caller.
+   */
+  private silentTeardown = false;
   private readonly callTimeoutMs: number;
   private readonly streamTimeoutMs: number;
   private readonly serviceCtor: grpc.ServiceClientConstructor;
@@ -845,6 +858,9 @@ export class GoCoreClient {
   /** Connect (or reconnect) to `addr` authenticating with `token`. */
   connect(addr: string, token: string): void {
     this.close();
+    // A fresh channel is live again, so a teardown flag from an earlier
+    // shutdown must not color cancellations on this one.
+    this.silentTeardown = false;
     this.target = addr;
     const metadata = new grpc.Metadata();
     metadata.set('authorization', `Bearer ${token}`);
@@ -853,14 +869,41 @@ export class GoCoreClient {
     this.connected = true;
   }
 
-  /** Tear down the channel. Safe to call multiple times. */
-  close(): void {
+  /**
+   * Tear down the channel. Safe to call multiple times.
+   *
+   * `silent` marks a deliberate shutdown (`Supervisor.stop()`): the teardown
+   * aborts every in-flight call, and grpc-js reports CANCELLED for each one.
+   * Those are flagged so the IPC boundary can resolve them instead of throwing
+   * (Electron logs every thrown handler at error level). A reconnect must NOT
+   * pass it — the caller still needs to learn that its operation did not run.
+   */
+  close(silent = false): void {
+    if (silent) this.silentTeardown = true;
+    this.closeEpoch += 1;
     this.connected = false;
     this.metadata = null;
     if (this.client) {
       this.client.close();
       this.client = null;
     }
+  }
+
+  /**
+   * Normalize a call failure, flagging the CANCELLED grpc-js reports for calls
+   * our own shutdown aborted. A CANCELLED returned on a live channel, or one
+   * caused by a reconnect, keeps the normal error path.
+   */
+  private normalizedFailure(err: grpc.ServiceError, epoch: number): AppError {
+    const appError = normalizeGrpcError(err);
+    if (
+      appError.code === 'CANCELLED' &&
+      this.closeEpoch !== epoch &&
+      this.silentTeardown
+    ) {
+      markSilentCancellation(appError);
+    }
+    return appError;
   }
 
   /**
@@ -1040,6 +1083,7 @@ export class GoCoreClient {
     onProgress: (progress: Progress) => void,
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+      const epoch = this.closeEpoch;
       const client = this.client;
       const metadata = this.newMetadata();
       if (!client || !metadata) {
@@ -1076,7 +1120,7 @@ export class GoCoreClient {
         onProgress({ percent: msg.percent, message: msg.message });
       });
       call.on('error', (err: grpc.ServiceError) => {
-        reject(normalizeGrpcError(err));
+        reject(this.normalizedFailure(err, epoch));
       });
       call.on('end', () => {
         resolve();
@@ -1110,6 +1154,7 @@ export class GoCoreClient {
     if (!client || !metadata) {
       throw notConnectedError();
     }
+    const epoch = this.closeEpoch;
     const method = (client as unknown as Record<string, unknown>)[rpcName];
     if (typeof method !== 'function') {
       throw {
@@ -1132,7 +1177,7 @@ export class GoCoreClient {
     });
     call.on('error', (err: grpc.ServiceError) => {
       if (cancelled) return;
-      onError?.(normalizeGrpcError(err));
+      onError?.(this.normalizedFailure(err, epoch));
     });
     return {
       cancel: () => {
@@ -1192,6 +1237,7 @@ export class GoCoreClient {
         } as AppError);
         return;
       }
+      const epoch = this.closeEpoch;
       const deadline = new Date(Date.now() + this.callTimeoutMs);
       (method as (
         request: unknown,
@@ -1205,7 +1251,7 @@ export class GoCoreClient {
         { deadline },
         (err: grpc.ServiceError | null, res: TResponse) => {
           if (err) {
-            reject(normalizeGrpcError(err));
+            reject(this.normalizedFailure(err, epoch));
           } else {
             resolve(res);
           }

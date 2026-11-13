@@ -59,14 +59,26 @@ interface FakeClient {
     onData: (msg: { repoId: string; paths: string[] }) => void,
     onError: (err: unknown) => void,
   ) => { cancel(): void };
-  close?: () => void;
+  close?: (silent?: boolean) => void;
 }
 
-/** Flip the supervisor to "ready" with a fake GitCore client. */
-function armReady(supervisor: Supervisor, client: FakeClient): void {
-  const internals = supervisor as unknown as { ready: boolean; client: FakeClient };
+/**
+ * Flip the supervisor to "ready" with a fake GitCore client, and optionally a
+ * fake Auth client (a second channel-bound client for `auth:*` channels).
+ */
+function armReady(
+  supervisor: Supervisor,
+  client: FakeClient,
+  authClient?: FakeClient,
+): void {
+  const internals = supervisor as unknown as {
+    ready: boolean;
+    client: FakeClient;
+    authClient?: FakeClient;
+  };
   internals.ready = true;
   internals.client = client;
+  if (authClient) internals.authClient = authClient;
 }
 
 describe('Supervisor.forwardToGo streaming dispatch', () => {
@@ -322,5 +334,54 @@ describe('Supervisor.forwardToGo M2 unary dispatch', () => {
 
     await expect(supervisor.forwardToGo(channel, payload)).resolves.toEqual({ ok: true });
     expect(invoke).toHaveBeenCalledWith(rpc, payload);
+  });
+});
+
+/**
+ * Guards the silent-teardown contract on both channel-bound clients: `stop()`
+ * must pass `silent = true` while a reconnect stays non-silent. Without the
+ * `true`, in-flight calls cancelled by the channel close surface as
+ * `CANCELLED` (stderr noise / rejected renderer handlers) on shutdown.
+ */
+describe('Supervisor teardown silence', () => {
+  it('closes client and authClient silently on stop()', () => {
+    const supervisor = makeSupervisor();
+    const close = vi.fn();
+    const authClose = vi.fn();
+    armReady(
+      supervisor,
+      { invokeStream: vi.fn(async () => {}), close },
+      { invokeStream: vi.fn(async () => {}), close: authClose },
+    );
+
+    supervisor.stop();
+
+    expect(close).toHaveBeenCalledWith(true);
+    expect(authClose).toHaveBeenCalledWith(true);
+  });
+
+  it('closes client and authClient non-silently on child loss (reconnect path)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const supervisor = makeSupervisor();
+    const close = vi.fn();
+    const authClose = vi.fn();
+    armReady(
+      supervisor,
+      { invokeStream: vi.fn(async () => {}), close },
+      { invokeStream: vi.fn(async () => {}), close: authClose },
+    );
+
+    const internals = supervisor as unknown as {
+      handleChildLoss(reason: string): void;
+    };
+    internals.handleChildLoss('exit code=1 signal=null');
+
+    // No argument (not `true`): the caller must still learn the call did not run.
+    expect(close).toHaveBeenCalledWith();
+    expect(authClose).toHaveBeenCalledWith();
+
+    // Child loss queues a restart timer; stop() clears it (and spawns nothing).
+    supervisor.stop();
+    warn.mockRestore();
   });
 });
