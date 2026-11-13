@@ -4,13 +4,13 @@
 # SingulariTree — Documentation index
 
 <!-- BEGIN GENERATED: index -->
-<!-- snapshot: 2026-10-25 -->
+<!-- snapshot: 2026-11-12 -->
 ## Generated index
 
 ### Overview
 
-- Markdown files: 49
-- Context docs: 7 | Notes: 6 | Hubs: 2 | adrs: 29 | templates: 0 | protocols: 3
+- Markdown files: 50
+- Context docs: 7 | Notes: 6 | Hubs: 2 | adrs: 30 | templates: 0 | protocols: 3
 
 ### Tree
 
@@ -41,6 +41,7 @@
   - adr-0040-per-repo-session-graph-selection-lock.md — adr, id: `adr-0040-per-repo-session-graph-selection-lock`
   - adr-0041-forced-dependency-floors-and-electron-42.md — adr, id: `adr-0041-forced-dependency-floors-and-electron-42`
   - adr-0042-cherry-pick-and-branch-lens.md — adr, id: `adr-0042-cherry-pick-and-branch-lens`
+  - adr-0043-vite-8-3-5-and-angular-compiler-22-2-6.md — adr, id: `adr-0043-vite-8-3-5-and-angular-compiler-22-2-6`
   - adr-024-multi-repo-workspaces.md — adr, id: `adr-024-multi-repo-workspaces`
   - adr-025-deep-links-and-clipboard-clone.md — adr, id: `adr-025-deep-links-and-clipboard-clone`
   - adr-026-cross-repo-commit-search.md — adr, id: `adr-026-cross-repo-commit-search`

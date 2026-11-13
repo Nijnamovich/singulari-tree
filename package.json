@@ -21,7 +21,7 @@
     "postinstall": "node tools/scripts/provision-electron.js"
   },
   "devDependencies": {
-    "@angular/compiler": "22.2.3",
+    "@angular/compiler": "22.2.6",
     "@playwright/test": "^1.63.0",
     "concurrently": "^9.2.5",
     "wait-on": "^9.1.0"
@@ -30,7 +30,7 @@
     "@vitest/mocker": "4.1.12",
     "dompurify": "3.4.17",
     "joi": "18.2.9",
-    "vite": "8.3.3"
+    "vite": "8.3.5"
   },
   "allowScripts": {
     "electron@42.11.9": true,

@@ -1,12 +1,12 @@
 ---
-last_updated: 2026-10-25
+last_updated: 2026-11-12
 status: active
 description: Agent-facing entry point of SingulariTree — Angular + Electron + Go core monorepo; stack, slices, commands and corpus navigation.
 tags:
 - project
 - entry-point
 - singularitree
-version: 1.10.0
+version: 1.10.1
 doc_language: en
 ---
 
@@ -33,9 +33,9 @@ SingulariTree is a **monorepo** for a cross-platform desktop Git client. System 
 | Area | Technology |
 |---|---|
 | JS runtime | Node >=22.22.3 (npm workspaces; CI pins 24 LTS) |
-| Renderer | Angular 22 (zoneless, standalone, signals) + TypeScript ~5.9 |
+| Renderer | Angular 22 (zoneless, standalone, signals) + TypeScript ~6.0.3 |
 | Shell | Electron ^42 (pinned 42.11.9) with TypeScript |
-| Core | Go 1.25 (module `github.com/SingulariTree/go-core`) in a Go 1.26 workspace (`go.work`) |
+| Core | Go 1.26.0 (module `github.com/SingulariTree/go-core`) in a Go 1.26.0 workspace (`go.work`) |
 | Transport | gRPC (`google.golang.org/grpc` 1.84) with HTTP fallback |
 | Persistence | SQLite `modernc.org/sqlite` (WAL, `foreign_keys=ON`, per-user DB outside the repo) |
 | Contracts | proto with `buf` (package `singularitree.v1`, alias `gitclient.v1`) |
@@ -114,7 +114,7 @@ SingulariTree/
 - SQLite per user (WAL, `foreign_keys=ON`) and **NEVER** stores Git objects.
 - Necomat `frontend/`/`backend/` remain intact.
 - Tests/builds from the package directory (never the root, except Go via `go.work`).
-- ADRs are append-only; numbering continues at ADR-043 (last used: ADR-0042; new files use the padded form, e.g. `adr-0040-…`).
+- ADRs are append-only; numbering continues at ADR-044 (last used: ADR-0043; new files use the padded form, e.g. `adr-0040-…`).
 
 ## Domain Entities
 

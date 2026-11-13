@@ -765,6 +765,32 @@ describe('GraphStore', () => {
     expect(store.offline()).toBe(false);
   });
 
+  it('ignores a cancelled gauge measurement instead of surfacing an error', async () => {
+    const getCommits = vi.fn(() => Promise.resolve(makePage(1, 0, 1)));
+    const getCommitStats = vi.fn(() =>
+      Promise.reject({ code: 'CANCELLED', message: 'Call cancelled' }),
+    );
+    store = new GraphStore(makeBridge({ getCommits, getCommitStats }));
+    store.repoId.set(REPO.id);
+
+    await store.loadWindow(0);
+
+    await vi.waitFor(() => expect(getCommitStats).toHaveBeenCalledTimes(1));
+    expect(store.statsError()).toBeNull();
+    expect(store.offline()).toBe(false);
+    expect(store.commits()).toHaveLength(1);
+  });
+
+  it('tolerates a cancellation that resolves without a payload', async () => {
+    const getCommitStats = vi.fn(() => Promise.resolve(undefined));
+    store = new GraphStore(makeBridge({ getCommitStats }));
+    store.repoId.set(REPO.id);
+
+    await expect(store.loadStats(['b'.repeat(40)])).resolves.toBeUndefined();
+    expect(store.statsError()).toBeNull();
+    expect(store.offline()).toBe(false);
+  });
+
   it('degrades the gauge to offline when the bridge is unavailable', async () => {
     const getCommits = vi.fn(() => Promise.resolve(makePage(1, 0, 1)));
     const getCommitStats = vi.fn(() => {

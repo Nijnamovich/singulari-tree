@@ -139,9 +139,13 @@ export class Supervisor {
     this.stopWatch();
     // Explicit shutdown: forget the watched repo so no reconnect re-opens it (W1).
     this.watchedRepoId = null;
-    this.client?.close();
+    // `true` = silent teardown: the channel close cancels in-flight calls, and
+    // those cancellations must not reach the renderer as errors nor be logged
+    // by Electron as a failed handler. A reconnect (`connect()` / child loss)
+    // stays non-silent so the caller still learns the operation did not run.
+    this.client?.close(true);
     this.client = null;
-    this.authClient?.close();
+    this.authClient?.close(true);
     this.authClient = null;
     // Null before kill so the child's `exit` handler does not schedule a restart.
     const child = this.proc;

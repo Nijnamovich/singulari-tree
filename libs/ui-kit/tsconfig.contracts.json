@@ -1,0 +1,24 @@
+{
+  // Same compiler baseline as the repo tsconfig (ES2022 / module preserve / bundler resolution)
+  // so the mirror is emitted with the flags the library itself compiles under.
+  "extends": "./tsconfig.json",
+  // Declaration-only mirror of the generated protobuf types (`libs/contracts/gen/ts`).
+  //
+  // Why: ui-kit imports contract types (`@contracts/domain`, `@singularitree/contracts/domain`)
+  // only as `import type`. ng-packagr pins `rootDir` to `libs/ui-kit/src`, and TypeScript
+  // rejects any *non-declaration* source file outside `rootDir` (TS6059) — which is exactly
+  // what the generated `*.ts` files are. Declaration files are exempt from that check, so we
+  // emit a `.d.ts` mirror here and let `tsconfig.lib.json` map the aliases to it for the
+  // library build only (see the comment in that file).
+  //
+  // The emitted files are build output (under `dist/`, already ignored); nothing here is
+  // committed and `libs/contracts/gen/**` is never modified. Run by `npm run build`.
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "../contracts/gen/ts",
+    "outDir": "../../dist/libs/contracts-types",
+    "skipLibCheck": true
+  },
+  "include": ["../contracts/gen/ts/**/*.ts"]
+}

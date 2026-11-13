@@ -19,6 +19,27 @@ export interface AppErrorPayload {
 /** Stable prefix so the renderer can recover the payload from an Error.message. */
 export const APP_ERROR_PREFIX = 'ST_APP_ERROR:';
 
+/**
+ * Cancellations the shell itself caused: `GoCoreClient.close(true)` tears down
+ * the channel and grpc-js reports `CANCELLED` for every call still in flight.
+ * Those calls have no consumer left, but a thrown `ipcMain.handle` listener is
+ * logged by Electron (`Error occurred in handler for '…'`) at error level, so
+ * the boundary must resolve them instead of rethrowing. Tracked by object
+ * identity (main-process only — never part of the wire envelope) so the
+ * distinction survives the supervisor → handler boundary untouched.
+ */
+const silentCancellations = new WeakSet<object>();
+
+/** Mark a normalized `AppError` as an intentional shell teardown. */
+export function markSilentCancellation(err: object): void {
+  silentCancellations.add(err);
+}
+
+/** True only for errors flagged by {@link markSilentCancellation}. */
+export function isSilentCancellation(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && silentCancellations.has(err);
+}
+
 /** True only for plain objects (not class instances such as `Error` or arrays). */
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   if (v === null || typeof v !== 'object') return false;
